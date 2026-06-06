@@ -1,1 +1,14 @@
+# Planning docs and local agent guide (untracked by design)
 .docs/
+CLAUDE.md
+
+# Build artifacts
+fussy
+*.o
+test/run
+compile_commands.json
+
+# Editor / OS cruft
+*.swp
+*~
+.DS_Store
