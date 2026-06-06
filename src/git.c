@@ -934,3 +934,104 @@ int gitop_branch_delete(git_ctx *g, const char *name, char *err, size_t errlen)
 	}
 	return 0;
 }
+
+/* ---- stashes ------------------------------------------------------------- */
+
+struct stash_acc {
+	git_stashlist *out;
+	int cap;
+};
+
+static int stash_cb(size_t index, const char *message, const git_oid *stash_id,
+                    void *payload)
+{
+	(void)stash_id;
+	struct stash_acc *a = payload;
+	const char *msg = message ? message : "";
+	if (a->out->count == a->cap) {
+		a->cap = a->cap ? a->cap * 2 : 16;
+		a->out->display = xrealloc(
+		    a->out->display, (size_t)a->cap * sizeof(*a->out->display));
+	}
+	int len = snprintf(NULL, 0, "stash@{%zu}: %s", index, msg);
+	char *line = xmalloc((size_t)len + 1);
+	snprintf(line, (size_t)len + 1, "stash@{%zu}: %s", index, msg);
+	a->out->display[a->out->count++] = line;
+	return 0;
+}
+
+git_stashlist git_stashes(git_ctx *g)
+{
+	git_stashlist out = {0};
+	struct stash_acc acc = {&out, 0};
+	git_stash_foreach(g->repo, stash_cb, &acc);
+	return out;
+}
+
+void git_stashlist_free(git_stashlist *s)
+{
+	for (int i = 0; i < s->count; i++)
+		free(s->display[i]);
+	free(s->display);
+	s->display = NULL;
+	s->count = 0;
+}
+
+int gitop_stash_push(git_ctx *g, const char *message, char *err, size_t errlen)
+{
+	git_signature *sig = NULL;
+	if (git_signature_default(&sig, g->repo) != 0) {
+		copy_err(err, errlen, "set user.name and user.email");
+		return -1;
+	}
+	git_oid oid;
+	int rc = git_stash_save(&oid, g->repo, sig,
+	                        (message && message[0]) ? message : NULL,
+	                        GIT_STASH_DEFAULT);
+	git_signature_free(sig);
+	if (rc == GIT_ENOTFOUND) {
+		copy_err(err, errlen, "nothing to stash");
+		return -1;
+	}
+	if (rc != 0) {
+		copy_err(err, errlen, "stash failed");
+		return -1;
+	}
+	return 0;
+}
+
+int gitop_stash_apply(git_ctx *g, size_t index, char *err, size_t errlen)
+{
+	int rc = git_stash_apply(g->repo, index, NULL);
+	if (rc != 0) {
+		copy_err(err, errlen,
+		         rc == GIT_EMERGECONFLICT
+		             ? "stash conflicts with the working tree"
+		             : "apply failed");
+		return -1;
+	}
+	return 0;
+}
+
+int gitop_stash_pop(git_ctx *g, size_t index, char *err, size_t errlen)
+{
+	int rc = git_stash_pop(g->repo, index, NULL);
+	if (rc != 0) {
+		copy_err(err, errlen,
+		         rc == GIT_EMERGECONFLICT
+		             ? "stash conflicts; not dropped"
+		             : "pop failed");
+		return -1;
+	}
+	return 0;
+}
+
+int gitop_stash_drop(git_ctx *g, size_t index, char *err, size_t errlen)
+{
+	int rc = git_stash_drop(g->repo, index);
+	if (rc != 0) {
+		copy_err(err, errlen, "drop failed");
+		return -1;
+	}
+	return 0;
+}

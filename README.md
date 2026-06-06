@@ -52,7 +52,9 @@ P push         L pull           F fetch     B log
 list with a preview pane. Type to filter, `Left`/`Right` scroll the preview. For
 Commits/Reflog, Enter opens the selection in the built-in pager; for Branches,
 Enter checks it out (refused if it would clobber uncommitted changes), `Ctrl-A`
-creates a branch, `Ctrl-D` deletes the selected one (refused if unmerged).
+creates a branch, `Ctrl-D` deletes the selected one (refused if unmerged); for
+Stashes, Enter pops, `Ctrl-A` applies, `Ctrl-D` drops, `Ctrl-S` stashes the
+current changes.
 
 `C`/`M` open a commit-message box (Enter commits, Esc cancels); `X`/`D` ask to confirm (y/n).
 `T` takes a tag name then an optional message (empty = lightweight, otherwise annotated).

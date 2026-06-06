@@ -20,6 +20,7 @@ void test_git_incoming(void);
 void test_git_log(void);
 void test_git_reflog(void);
 void test_git_branches(void);
+void test_git_stashes(void);
 void test_e2e_stage_commit_push_pull(void);
 void test_git_not_a_repo(void);
 void test_gitop_stage_unstage(void);
@@ -113,6 +114,7 @@ int main(void)
 	RUN(test_git_log);
 	RUN(test_git_reflog);
 	RUN(test_git_branches);
+	RUN(test_git_stashes);
 	RUN(test_e2e_stage_commit_push_pull);
 	RUN(test_git_not_a_repo);
 	RUN(test_gitop_stage_unstage);

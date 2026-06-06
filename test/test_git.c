@@ -352,6 +352,66 @@ void test_git_branches(void)
 	cleanup(dir);
 }
 
+void test_git_stashes(void)
+{
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_stashes (no git CLI)\n");
+		return;
+	}
+
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "gitst");
+
+	char cmd[2300];
+	snprintf(cmd, sizeof(cmd),
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && git init -q && "
+	         "git config user.email t@t && git config user.name t && "
+	         "printf 1 > f && git add f && git commit -qm first && "
+	         "printf 2 > f", /* an uncommitted change to stash */
+	         dir, dir, dir);
+	CHECK(system(cmd) == 0);
+
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(dir) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err, sizeof(err))) {
+		/* No stashes yet. */
+		git_stashlist s0 = git_stashes(&g);
+		CHECK(s0.count == 0);
+		git_stashlist_free(&s0);
+
+		/* Push: stashes the dirty change; the entry appears. */
+		CHECK(gitop_stash_push(&g, "wip", err, sizeof(err)) == 0);
+		git_stashlist s1 = git_stashes(&g);
+		CHECK(s1.count == 1);
+		if (s1.count == 1)
+			CHECK(strstr(s1.display[0], "wip") != NULL);
+		git_stashlist_free(&s1);
+
+		/* Pop: applies and drops; the list is empty again. */
+		CHECK(gitop_stash_pop(&g, 0, err, sizeof(err)) == 0);
+		git_stashlist s2 = git_stashes(&g);
+		CHECK(s2.count == 0);
+		git_stashlist_free(&s2);
+
+		/* Nothing to stash now (change is back in the worktree... it
+		 * is, so push again works; then drop without applying). */
+		CHECK(gitop_stash_push(&g, NULL, err, sizeof(err)) == 0);
+		CHECK(gitop_stash_drop(&g, 0, err, sizeof(err)) == 0);
+		git_stashlist s3 = git_stashes(&g);
+		CHECK(s3.count == 0);
+		git_stashlist_free(&s3);
+
+		git_close(&g);
+	}
+
+	CHECK(chdir(cwd) == 0);
+	cleanup(dir);
+}
+
 void test_git_not_a_repo(void)
 {
 	char dir[256];

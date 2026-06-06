@@ -87,6 +87,25 @@ int gitop_branch_create(git_ctx *g, const char *name, char *err, size_t errlen);
  * merged into HEAD (mirroring `git branch -d`). */
 int gitop_branch_delete(git_ctx *g, const char *name, char *err, size_t errlen);
 
+/* Stashes for the stash browser. `display[i]` is "stash@{i}: <message>"; the
+ * stash index for the ops below is the array position i. */
+typedef struct {
+	char **display;
+	int count;
+} git_stashlist;
+
+git_stashlist git_stashes(git_ctx *g);
+void git_stashlist_free(git_stashlist *s);
+
+/* Stash a new entry from the current changes (message may be NULL/empty). */
+int gitop_stash_push(git_ctx *g, const char *message, char *err, size_t errlen);
+/* Apply stash `index` to the worktree, keeping it in the stash list. */
+int gitop_stash_apply(git_ctx *g, size_t index, char *err, size_t errlen);
+/* Apply stash `index` and drop it (git stash pop). */
+int gitop_stash_pop(git_ctx *g, size_t index, char *err, size_t errlen);
+/* Drop stash `index` without applying. */
+int gitop_stash_drop(git_ctx *g, size_t index, char *err, size_t errlen);
+
 /*
  * Local mutations, all libgit2 in-process so the index is touched by ONE
  * mechanism (fixing fussr's libgit2/subprocess split). Each returns 0 on

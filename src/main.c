@@ -435,11 +435,106 @@ static void browse_branches(loopctx *L)
 	}
 }
 
+/* Preview for the stash browser: the stash's diff. */
+struct stash_preview_ctx {
+	bool color;
+};
+
+static char *stash_preview(void *vctx, int item)
+{
+	struct stash_preview_ctx *c = vctx;
+	char *cflag = c->color ? "--color=always" : "--color=never";
+	char ref[32];
+	snprintf(ref, sizeof(ref), "stash@{%d}", item);
+	char *argv[] = {"git", "stash", "show", cflag, "-p", ref, NULL};
+	char *out = NULL, *err = NULL;
+	int rc = proc_run(argv, &out, &err);
+	free(err);
+	if (rc != 0 || out == NULL) {
+		free(out);
+		return xstrdup("(no diff)");
+	}
+	return out;
+}
+
+/* Stash browser: Enter pops, ^A applies (keep), ^D drops, ^S stashes the
+ * current changes. Each action refreshes the tree and reloads the stash list.
+ */
+static void browse_stashes(loopctx *L)
+{
+	static const picker_binding binds[] = {
+	    {KEY_CTRL('A'), "^A apply"},
+	    {KEY_CTRL('D'), "^D drop"},
+	    {KEY_CTRL('S'), "^S stash"},
+	};
+
+	bool again = true;
+	while (again) {
+		again = false;
+		git_stashlist sl = git_stashes(L->g);
+		struct stash_preview_ctx pc = {.color = L->color};
+		picker_spec sp = {.title = "Stashes  (Enter: pop)",
+		                  .items = sl.display,
+		                  .count = sl.count,
+		                  .preview = stash_preview,
+		                  .preview_ctx = &pc,
+		                  .bindings = binds,
+		                  .binding_count = 3};
+		picker_result r = picker_run(L->s, &sp, L->color);
+
+		char err[256], msg[160];
+		size_t idx = (size_t)r.index;
+		if (r.key == KEY_ENTER && r.index >= 0) {
+			if (gitop_stash_pop(L->g, idx, err, sizeof(err)) != 0) {
+				set_status(L->a, err);
+			} else {
+				snprintf(msg, sizeof(msg), "popped stash@{%d}",
+				         r.index);
+				do_refresh(L);
+				set_status(L->a, msg);
+				again = true;
+			}
+		} else if (r.key == KEY_CTRL('A') && r.index >= 0) {
+			if (gitop_stash_apply(L->g, idx, err, sizeof(err)) !=
+			    0) {
+				set_status(L->a, err);
+			} else {
+				snprintf(msg, sizeof(msg), "applied stash@{%d}",
+				         r.index);
+				do_refresh(L);
+				set_status(L->a, msg);
+				again = true;
+			}
+		} else if (r.key == KEY_CTRL('D') && r.index >= 0) {
+			if (gitop_stash_drop(L->g, idx, err, sizeof(err)) !=
+			    0) {
+				set_status(L->a, err);
+			} else {
+				snprintf(msg, sizeof(msg), "dropped stash@{%d}",
+				         r.index);
+				set_status(L->a, msg);
+				again = true;
+			}
+		} else if (r.key == KEY_CTRL('S')) {
+			if (gitop_stash_push(L->g, NULL, err, sizeof(err)) !=
+			    0) {
+				set_status(L->a, err);
+			} else {
+				do_refresh(L);
+				set_status(L->a, "stashed changes");
+				again = true;
+			}
+		}
+
+		git_stashlist_free(&sl);
+	}
+}
+
 /* The browse menu: a picker over the available browsers (itself reusing the
  * widget). Scales as browsers are added without spending a key on each. */
 static void browse_menu(loopctx *L)
 {
-	char *items[] = {"Commits", "Reflog", "Branches"};
+	char *items[] = {"Commits", "Reflog", "Branches", "Stashes"};
 	picker_spec sp = {.title = "Browse",
 	                  .items = items,
 	                  .count = (int)(sizeof(items) / sizeof(*items))};
@@ -455,6 +550,9 @@ static void browse_menu(loopctx *L)
 		break;
 	case 2:
 		browse_branches(L);
+		break;
+	case 3:
+		browse_stashes(L);
 		break;
 	default:
 		break;
