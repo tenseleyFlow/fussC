@@ -7,9 +7,25 @@
 #include <string.h>
 #include <unistd.h>
 
-/* These tests build a real repository in a temp dir with the `git` CLI, then
+/*
+ * These tests build a real repository in a temp dir with the `git` CLI, then
  * read it back through our libgit2 wrapper. No commits are needed: a staged new
- * file shows as INDEX_NEW even before the first commit. */
+ * file shows as INDEX_NEW even before the first commit. The temp dir is named
+ * from the pid (mkdtemp is hidden under strict _POSIX_C_SOURCE on macOS/BSD).
+ */
+
+static void temp_dir(char *buf, size_t n, const char *tag)
+{
+	snprintf(buf, n, "/tmp/fussy_%s_%ld", tag, (long)getpid());
+}
+
+static void cleanup(const char *dir)
+{
+	char cmd[2100];
+	snprintf(cmd, sizeof(cmd), "rm -rf '%s'", dir);
+	int rc = system(cmd);
+	(void)rc;
+}
 
 static bool has_bit(const tree *t, const char *path, file_status bit)
 {
@@ -19,17 +35,17 @@ static bool has_bit(const tree *t, const char *path, file_status bit)
 
 void test_git_status(void)
 {
-	char dir[] = "/tmp/fussy_git_XXXXXX";
-	CHECK(mkdtemp(dir) != NULL);
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "git");
 
-	char cmd[2048];
+	char cmd[2300];
 	snprintf(cmd, sizeof(cmd),
-	         "cd '%s' && git init -q && "
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && git init -q && "
 	         "printf a > staged.txt && "
 	         "printf b > untracked.txt && "
 	         "mkdir sub && printf c > sub/nested.txt && "
 	         "git add staged.txt sub/nested.txt",
-	         dir);
+	         dir, dir, dir);
 	CHECK(system(cmd) == 0);
 
 	char cwd[2048];
@@ -58,14 +74,17 @@ void test_git_status(void)
 	}
 
 	CHECK(chdir(cwd) == 0);
-	snprintf(cmd, sizeof(cmd), "rm -rf '%s'", dir);
-	(void)system(cmd);
+	cleanup(dir);
 }
 
 void test_git_not_a_repo(void)
 {
-	char dir[] = "/tmp/fussy_nogit_XXXXXX";
-	CHECK(mkdtemp(dir) != NULL);
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "nogit");
+
+	char cmd[2300];
+	snprintf(cmd, sizeof(cmd), "rm -rf '%s' && mkdir -p '%s'", dir, dir);
+	CHECK(system(cmd) == 0);
 
 	char cwd[2048];
 	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
@@ -78,7 +97,5 @@ void test_git_not_a_repo(void)
 	CHECK(err[0] != '\0'); /* a message was produced */
 
 	CHECK(chdir(cwd) == 0);
-	char cmd[2048];
-	snprintf(cmd, sizeof(cmd), "rm -rf '%s'", dir);
-	(void)system(cmd);
+	cleanup(dir);
 }
