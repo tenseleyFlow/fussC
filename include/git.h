@@ -106,6 +106,15 @@ int gitop_stash_pop(git_ctx *g, size_t index, char *err, size_t errlen);
 /* Drop stash `index` without applying. */
 int gitop_stash_drop(git_ctx *g, size_t index, char *err, size_t errlen);
 
+/* Reset modes for gitop_reset (values match the order shown in the UI). */
+enum { RESET_MIXED, RESET_SOFT, RESET_HARD };
+
+/* Move HEAD to the commit `rev` resolves to. MIXED resets the index (keeps the
+ * worktree), SOFT keeps index + worktree, HARD also overwrites the worktree
+ * (destructive). 0 on success, else -1 with a message. */
+int gitop_reset(git_ctx *g, const char *rev, int mode, char *err,
+                size_t errlen);
+
 /*
  * Local mutations, all libgit2 in-process so the index is touched by ONE
  * mechanism (fixing fussr's libgit2/subprocess split). Each returns 0 on

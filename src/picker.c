@@ -498,3 +498,49 @@ bool prompt_line(screen *s, const char *title, char *out, size_t outsz,
 	screen_invalidate(s);
 	return accepted;
 }
+
+bool confirm_modal(screen *s, const char *prompt, bool color)
+{
+	screen_invalidate(s);
+
+	bool result = false;
+	bool running = true;
+	while (running) {
+		int rows, cols;
+		term_size(&rows, &cols);
+
+		char **lines =
+		    xmalloc((size_t)(rows > 0 ? rows : 1) * sizeof(*lines));
+		for (int i = 0; i < rows; i++)
+			lines[i] = NULL;
+		if (rows > 0) {
+			strbuf ln = {0};
+			if (color)
+				sb_put(&ln, "\033[1m");
+			sb_put(&ln, prompt ? prompt : "");
+			sb_put(&ln, "  (y/n)");
+			if (color)
+				sb_put(&ln, "\033[0m");
+			lines[rows / 2] =
+			    clip_to_width(ln.buf ? ln.buf : "", cols);
+			free(ln.buf);
+		}
+		for (int i = 0; i < rows; i++)
+			if (lines[i] == NULL)
+				lines[i] = xstrdup("");
+		screen_present(s, lines, rows);
+
+		int key = term_read_key();
+		if (key == 'y' || key == 'Y') {
+			result = true;
+			running = false;
+		} else if (key == 'n' || key == 'N' || key == KEY_ESC ||
+		           key == KEY_EOF) {
+			result = false;
+			running = false;
+		}
+	}
+
+	screen_invalidate(s);
+	return result;
+}

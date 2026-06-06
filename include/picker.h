@@ -115,4 +115,10 @@ picker_result picker_run(screen *s, const picker_spec *spec, bool color);
 bool prompt_line(screen *s, const char *title, char *out, size_t outsz,
                  bool color);
 
+/*
+ * Modal y/n confirmation: show `prompt` centered, return true on y/Y, false on
+ * n/N/Esc. Repaints fully on exit. For guarding destructive actions.
+ */
+bool confirm_modal(screen *s, const char *prompt, bool color);
+
 #endif /* FUSSY_PICKER_H */

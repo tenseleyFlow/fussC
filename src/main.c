@@ -530,11 +530,59 @@ static void browse_stashes(loopctx *L)
 	}
 }
 
+/* Reset HEAD to a chosen commit: pick the commit (with a `git show` preview),
+ * then the mode; a hard reset asks to confirm because it discards changes. */
+static void browse_reset(loopctx *L)
+{
+	git_log_list log = git_log(L->g, 5000);
+	if (log.count == 0) {
+		set_status(L->a, "no commits");
+		git_log_free(&log);
+		return;
+	}
+	struct commit_preview_ctx pc = {.log = &log, .color = L->color};
+	picker_spec sp = {.title = "Reset HEAD to...",
+	                  .items = log.lines,
+	                  .count = log.count,
+	                  .preview = commit_preview,
+	                  .preview_ctx = &pc};
+	picker_result r = picker_run(L->s, &sp, L->color);
+	if (r.key != KEY_ENTER || r.index < 0) {
+		git_log_free(&log);
+		return;
+	}
+
+	/* Mode order matches the RESET_* enum (mixed, soft, hard). */
+	char *modes[] = {"mixed - reset the index, keep the worktree",
+	                 "soft - keep the index and worktree",
+	                 "hard - DISCARD index and worktree changes"};
+	picker_spec msp = {.title = "Reset mode", .items = modes, .count = 3};
+	picker_result mr = picker_run(L->s, &msp, L->color);
+	if (mr.key == KEY_ENTER && mr.index >= 0) {
+		bool ok = true;
+		if (mr.index == RESET_HARD)
+			ok = confirm_modal(
+			    L->s, "Hard reset discards uncommitted changes.",
+			    L->color);
+		if (ok) {
+			char err[256];
+			if (gitop_reset(L->g, log.shas[r.index], mr.index, err,
+			                sizeof(err)) != 0) {
+				set_status(L->a, err);
+			} else {
+				do_refresh(L);
+				set_status(L->a, "reset HEAD");
+			}
+		}
+	}
+	git_log_free(&log);
+}
+
 /* The browse menu: a picker over the available browsers (itself reusing the
  * widget). Scales as browsers are added without spending a key on each. */
 static void browse_menu(loopctx *L)
 {
-	char *items[] = {"Commits", "Reflog", "Branches", "Stashes"};
+	char *items[] = {"Commits", "Reflog", "Branches", "Stashes", "Reset"};
 	picker_spec sp = {.title = "Browse",
 	                  .items = items,
 	                  .count = (int)(sizeof(items) / sizeof(*items))};
@@ -553,6 +601,9 @@ static void browse_menu(loopctx *L)
 		break;
 	case 3:
 		browse_stashes(L);
+		break;
+	case 4:
+		browse_reset(L);
 		break;
 	default:
 		break;

@@ -412,6 +412,57 @@ void test_git_stashes(void)
 	cleanup(dir);
 }
 
+void test_git_reset(void)
+{
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_reset (no git CLI)\n");
+		return;
+	}
+
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "gitrst");
+
+	char cmd[2300];
+	snprintf(cmd, sizeof(cmd),
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && git init -q && "
+	         "git config user.email t@t && git config user.name t && "
+	         "printf 1 > f && git add f && git commit -qm first && "
+	         "printf 2 > f && git commit -qam second",
+	         dir, dir, dir);
+	CHECK(system(cmd) == 0);
+
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(dir) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err, sizeof(err))) {
+		/* Two commits; reset --hard to the parent leaves one and a
+		 * clean worktree (f == "1"). */
+		CHECK(gitop_reset(&g, "HEAD~1", RESET_HARD, err, sizeof(err)) ==
+		      0);
+		git_log_list log = git_log(&g, 0);
+		CHECK(log.count == 1);
+		git_log_free(&log);
+
+		git_close(&g);
+	}
+
+	char content[16] = {0};
+	char fpath[320];
+	snprintf(fpath, sizeof(fpath), "%s/f", dir);
+	FILE *fp = fopen(fpath, "r");
+	if (fp) {
+		(void)(fgets(content, sizeof(content), fp) != NULL);
+		fclose(fp);
+	}
+	CHECK_STR_EQ(content, "1"); /* hard reset restored the file */
+
+	CHECK(chdir(cwd) == 0);
+	cleanup(dir);
+}
+
 void test_git_not_a_repo(void)
 {
 	char dir[256];

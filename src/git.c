@@ -1035,3 +1035,22 @@ int gitop_stash_drop(git_ctx *g, size_t index, char *err, size_t errlen)
 	}
 	return 0;
 }
+
+int gitop_reset(git_ctx *g, const char *rev, int mode, char *err, size_t errlen)
+{
+	git_object *target = NULL;
+	if (git_revparse_single(&target, g->repo, rev) != 0) {
+		copy_err(err, errlen, "no such commit");
+		return -1;
+	}
+	git_reset_t t = mode == RESET_SOFT   ? GIT_RESET_SOFT
+	                : mode == RESET_HARD ? GIT_RESET_HARD
+	                                     : GIT_RESET_MIXED;
+	int rc = git_reset(g->repo, target, t, NULL);
+	git_object_free(target);
+	if (rc != 0) {
+		copy_err(err, errlen, "reset failed");
+		return -1;
+	}
+	return 0;
+}
