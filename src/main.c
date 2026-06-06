@@ -190,6 +190,46 @@ static void net_dispatch(loopctx *L, int op)
 	free(r);
 }
 
+static file_status sel_status(app *a)
+{
+	uint32_t n = app_selected_node(a);
+	return n == NODE_NIL ? 0 : a->t.nodes[n].status;
+}
+
+/* Single-quote `s` for /bin/sh into out (a literal ' becomes '\''). */
+static void shquote(const char *s, char *out, size_t n)
+{
+	size_t o = 0;
+	if (o < n - 1)
+		out[o++] = '\'';
+	for (; *s != '\0'; s++) {
+		if (*s == '\'') {
+			if (o + 4 >= n)
+				break;
+			out[o++] = '\'';
+			out[o++] = '\\';
+			out[o++] = '\'';
+			out[o++] = '\'';
+		} else if (o < n - 1) {
+			out[o++] = *s;
+		}
+	}
+	if (o < n - 1)
+		out[o++] = '\'';
+	out[o] = '\0';
+}
+
+/* Hand the terminal to a pager (sh -c cmd), then re-enter and force a repaint.
+ */
+static void run_viewer(loopctx *L, const char *cmd)
+{
+	term_restore(); /* leave alt-screen + raw so the pager owns the tty */
+	int rc = system(cmd);
+	(void)rc;
+	term_resume();
+	screen_invalidate(L->s);
+}
+
 /* UPPERCASE command from the main view: immediate ops run now; the rest open a
  * modal overlay that executes on confirm. */
 static void run_command(loopctx *L, uint32_t letter)
@@ -239,6 +279,25 @@ static void run_command(loopctx *L, uint32_t letter)
 		break;
 	case 'F':
 		net_dispatch(L, NET_FETCH);
+		break;
+	case 'G': /* full status in the pager */
+		run_viewer(L, "git -c color.status=always status | "
+		              "${PAGER:-less -R}");
+		break;
+	case 'V': /* view: diff a changed file, else its contents */
+		if (p) {
+			char q[1100], cmd[1300];
+			shquote(p, q, sizeof(q));
+			if (sel_status(a) & (ST_STAGED | ST_UNSTAGED))
+				snprintf(cmd, sizeof(cmd),
+				         "git diff --color=always HEAD -- %s "
+				         "| ${PAGER:-less -R}",
+				         q);
+			else
+				snprintf(cmd, sizeof(cmd),
+				         "${PAGER:-less -R} %s", q);
+			run_viewer(L, cmd);
+		}
 		break;
 	case 'R':
 		if (p)

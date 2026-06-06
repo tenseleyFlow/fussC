@@ -13,8 +13,13 @@
  * atexit and signal handlers so the terminal is always restored. */
 bool term_init(void);
 
-/* Restore the terminal to its original state. Idempotent. */
+/* Restore the terminal to its original state. Idempotent. Also used to suspend
+ * before handing the terminal to a pager. */
 void term_restore(void);
+
+/* Re-enter raw mode + alternate screen after a suspend (e.g. returning from a
+ * pager). Reuses the termios saved by term_init. */
+void term_resume(void);
 
 /* Current terminal size in character cells. */
 void term_size(int *rows, int *cols);

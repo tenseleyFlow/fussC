@@ -204,7 +204,8 @@ static char *build_footer_git(bool color)
 	if (color)
 		sb_put(&s, "\033[90m");
 	sb_put(&s, "A stage  C commit  P push  L pull  F fetch  U unstage  "
-	           "X discard  D delete  R rename  T tag  M amend  S/Z all");
+	           "X discard  D delete  R rename  T tag  M amend  "
+	           "V view  G status  S/Z all");
 	if (color)
 		sb_put(&s, "\033[0m");
 	return s.buf ? s.buf : xstrdup("");
@@ -375,7 +376,7 @@ static char **build_help(int *count)
 	    {"A stage", "U unstage"}, {"S stage all", "Z unstage all"},
 	    {"C commit", "M amend"},  {"P push", "L pull"},
 	    {"F fetch", "T tag"},     {"X discard", "D delete"},
-	    {"R rename", ""},
+	    {"R rename", "V view"},   {"G status", ""},
 	};
 	int nav_n = (int)(sizeof(NAV) / sizeof(*NAV));
 	int git_n = (int)(sizeof(GIT) / sizeof(*GIT));
@@ -640,6 +641,13 @@ void screen_init(screen *s)
 }
 
 void screen_free(screen *s)
+{
+	free_frame(s->prev, s->rows);
+	s->prev = NULL;
+	s->rows = 0;
+}
+
+void screen_invalidate(screen *s)
 {
 	free_frame(s->prev, s->rows);
 	s->prev = NULL;

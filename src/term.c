@@ -96,6 +96,23 @@ bool term_init(void)
 	return true;
 }
 
+void term_resume(void)
+{
+	if (active)
+		return;
+	struct termios raw = saved_termios;
+	raw.c_iflag &= (tcflag_t) ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+	raw.c_oflag &= (tcflag_t) ~(OPOST);
+	raw.c_cflag |= (tcflag_t)(CS8);
+	raw.c_lflag &= (tcflag_t) ~(ECHO | ICANON | IEXTEN | ISIG);
+	raw.c_cc[VMIN] = 1;
+	raw.c_cc[VTIME] = 0;
+	tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+	active = true;
+	write_all(ALT_SCREEN_ON);
+	write_all(CURSOR_HIDE);
+}
+
 bool term_take_resize(void)
 {
 	if (resized) {

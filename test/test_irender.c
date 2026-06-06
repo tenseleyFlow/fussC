@@ -98,9 +98,9 @@ void test_render_overlay_help(void)
 	app_reflatten(&a);
 	overlay_open_help(&a.ov);
 
-	char **f = render_frame(&a, "r", "b", false, 20, 70);
+	char **f = render_frame(&a, "r", "b", false, 24, 70);
 	bool title = false, git = false, close = false;
-	for (int i = 0; i < 20; i++) {
+	for (int i = 0; i < 24; i++) {
 		if (strstr(f[i], "Keys"))
 			title = true;
 		if (strstr(f[i], "A stage"))
@@ -111,7 +111,7 @@ void test_render_overlay_help(void)
 	CHECK(title);
 	CHECK(git);
 	CHECK(close);
-	free_frame(f, 20);
+	free_frame(f, 24);
 	app_free(&a);
 }
 

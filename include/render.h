@@ -39,6 +39,9 @@ typedef struct {
 
 void screen_init(screen *s);
 void screen_free(screen *s);
+/* Drop the cached frame so the next screen_draw fully repaints (after a pager).
+ */
+void screen_invalidate(screen *s);
 void screen_draw(screen *s, const app *a, const char *repo, const char *branch,
                  bool color);
 
