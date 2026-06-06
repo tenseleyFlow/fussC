@@ -67,6 +67,10 @@ void test_overlay_commit_edit(void);
 void test_overlay_amend_and_rename_prefill(void);
 void test_overlay_utf8_edit(void);
 void test_overlay_confirm_is_not_editable(void);
+void test_proc_stdout(void);
+void test_proc_stderr_and_exit(void);
+void test_proc_large_output(void);
+void test_proc_spawn_failure(void);
 
 int main(void)
 {
@@ -133,6 +137,10 @@ int main(void)
 	RUN(test_overlay_amend_and_rename_prefill);
 	RUN(test_overlay_utf8_edit);
 	RUN(test_overlay_confirm_is_not_editable);
+	RUN(test_proc_stdout);
+	RUN(test_proc_stderr_and_exit);
+	RUN(test_proc_large_output);
+	RUN(test_proc_spawn_failure);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);
