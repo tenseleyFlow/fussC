@@ -203,8 +203,8 @@ static char *build_footer_git(bool color)
 	strbuf s = {0};
 	if (color)
 		sb_put(&s, "\033[90m");
-	sb_put(&s, "A stage  C commit  U unstage  X discard  D delete  "
-	           "R rename  T tag  M amend  S/Z all");
+	sb_put(&s, "A stage  C commit  P push  L pull  F fetch  U unstage  "
+	           "X discard  D delete  R rename  T tag  M amend  S/Z all");
 	if (color)
 		sb_put(&s, "\033[0m");
 	return s.buf ? s.buf : xstrdup("");
@@ -373,8 +373,9 @@ static char **build_help(int *count)
 	};
 	static const char *const GIT[][2] = {
 	    {"A stage", "U unstage"}, {"S stage all", "Z unstage all"},
-	    {"C commit", "M amend"},  {"X discard", "D delete"},
-	    {"R rename", "T tag"},
+	    {"C commit", "M amend"},  {"P push", "L pull"},
+	    {"F fetch", "T tag"},     {"X discard", "D delete"},
+	    {"R rename", ""},
 	};
 	int nav_n = (int)(sizeof(NAV) / sizeof(*NAV));
 	int git_n = (int)(sizeof(GIT) / sizeof(*GIT));
@@ -419,6 +420,18 @@ static void draw_overlay(char **lines, int rows, int cols, const overlay *o,
 		content = build_help(&ncontent);
 		if (inner < 40)
 			inner = 40; /* keep the aligned columns readable */
+	} else if (o->kind == OV_REMOTE) {
+		ncontent = o->remote_count;
+		content = xmalloc((size_t)(ncontent ? ncontent : 1) *
+		                  sizeof(*content));
+		for (int i = 0; i < ncontent; i++) {
+			strbuf s = {0};
+			sb_put(&s, i == o->remote_sel ? "\342\206\222 " : "  ");
+			sb_put(&s, o->remotes[i]);
+			content[i] = s.buf ? s.buf : xstrdup("");
+		}
+		if (ncontent == 0)
+			content[ncontent++] = xstrdup("  (no remotes)");
 	} else if (o->kind == OV_CONFIRM) {
 		content = xmalloc(sizeof(*content));
 		content[0] = xstrdup("y: yes    n: no");
@@ -441,12 +454,14 @@ static void draw_overlay(char **lines, int rows, int cols, const overlay *o,
 		}
 	}
 
-	const char *hint = o->kind == OV_CONFIRM  ? ""
-	                   : o->kind == OV_HELP   ? "any key to close"
-	                   : o->kind == OV_COMMIT ? "Enter commit  Esc cancel"
-	                   : o->kind == OV_RENAME
-	                       ? "Enter rename  Esc cancel"
-	                       : "Enter create tag  Esc cancel";
+	const char *hint =
+	    o->kind == OV_CONFIRM  ? ""
+	    : o->kind == OV_HELP   ? "any key to close"
+	    : o->kind == OV_REMOTE ? "\342\206\221\342\206\223 select  "
+	                             "Enter  Esc cancel"
+	    : o->kind == OV_COMMIT ? "Enter commit  Esc cancel"
+	    : o->kind == OV_RENAME ? "Enter rename  Esc cancel"
+	                           : "Enter create tag  Esc cancel";
 	bool has_hint = hint[0] != '\0';
 
 	int box_w = inner + 4; /* BOX_V + space + inner + space + BOX_V */

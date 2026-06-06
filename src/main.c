@@ -66,6 +66,10 @@ typedef struct {
 	app *a;
 	git_ctx *g;
 	fuzzy_engine *eng;
+	screen *s;
+	const char *repo;
+	const char *branch;
+	bool color;
 	bool have_repo;
 	bool all;
 	bool running;
@@ -74,6 +78,13 @@ typedef struct {
 static void set_status(app *a, const char *msg)
 {
 	snprintf(a->status, sizeof(a->status), "%s", msg);
+}
+
+/* Force a redraw now (so a "working…" message is visible before a blocking op).
+ */
+static void flush_status(loopctx *L)
+{
+	screen_draw(L->s, L->a, L->repo, L->branch, L->color);
 }
 
 static const char *sel_path(app *a)
@@ -133,6 +144,52 @@ static void op_result(loopctx *L, int rc, const char *err, const char *ok)
 	}
 }
 
+/* Run a network op with a visible "working" state, then refresh + show result.
+ */
+static void net_run(loopctx *L, int op, const char *remote)
+{
+	app *a = L->a;
+	char msg[256];
+	set_status(a, op == NET_PUSH   ? "pushing\342\200\246"
+	              : op == NET_PULL ? "pulling\342\200\246"
+	                               : "fetching\342\200\246");
+	flush_status(L); /* show it before the blocking call */
+
+	if (op == NET_PUSH)
+		gitnet_push(L->g, remote, msg, sizeof(msg));
+	else if (op == NET_PULL)
+		gitnet_pull(L->g, remote, msg, sizeof(msg));
+	else
+		gitnet_fetch(L->g, remote, msg, sizeof(msg));
+
+	do_refresh(L); /* pull/fetch can change refs; harmless for push */
+	set_status(a, msg);
+}
+
+/* Decide whether a push/pull needs the remote picker, then run or open it. */
+static void net_dispatch(loopctx *L, int op)
+{
+	if (op == NET_FETCH) {
+		net_run(L, op, NULL);
+		return;
+	}
+	if (git_has_upstream(L->g)) {
+		net_run(L, op, NULL);
+		return;
+	}
+	int n = 0;
+	char **r = git_remote_names(L->g, &n);
+	if (n == 0)
+		set_status(L->a, "no remote configured");
+	else if (n == 1)
+		net_run(L, op, r[0]);
+	else
+		overlay_open_remote(&L->a->ov, r, n, op);
+	for (int i = 0; i < n; i++)
+		free(r[i]);
+	free(r);
+}
+
 /* UPPERCASE command from the main view: immediate ops run now; the rest open a
  * modal overlay that executes on confirm. */
 static void run_command(loopctx *L, uint32_t letter)
@@ -173,6 +230,15 @@ static void run_command(loopctx *L, uint32_t letter)
 	}
 	case 'T':
 		overlay_open_tag(&a->ov);
+		break;
+	case 'P':
+		net_dispatch(L, NET_PUSH);
+		break;
+	case 'L':
+		net_dispatch(L, NET_PULL);
+		break;
+	case 'F':
+		net_dispatch(L, NET_FETCH);
 		break;
 	case 'R':
 		if (p)
@@ -345,6 +411,36 @@ static void overlay_key(loopctx *L, int key)
 		return;
 	}
 
+	if (o->kind == OV_REMOTE) {
+		switch (key) {
+		case KEY_UP:
+		case KEY_CTRL('P'):
+			if (o->remote_sel > 0)
+				o->remote_sel--;
+			break;
+		case KEY_DOWN:
+		case KEY_CTRL('N'):
+			if (o->remote_sel + 1 < o->remote_count)
+				o->remote_sel++;
+			break;
+		case KEY_ENTER: {
+			int op = o->net_op;
+			char rem[64];
+			snprintf(rem, sizeof(rem), "%s",
+			         o->remotes[o->remote_sel]);
+			overlay_close(o);
+			net_run(L, op, rem);
+			break;
+		}
+		case KEY_ESC:
+			overlay_close(o);
+			break;
+		default:
+			break;
+		}
+		return;
+	}
+
 	if (o->kind == OV_CONFIRM) {
 		if (key == 'y' || key == 'Y')
 			overlay_execute(L);
@@ -412,6 +508,10 @@ static int run_interactive(bool all)
 	loopctx L = {.a = &a,
 	             .g = &g,
 	             .eng = have_engine ? &engine : NULL,
+	             .s = &s,
+	             .repo = repo,
+	             .branch = branch,
+	             .color = color,
 	             .have_repo = have_repo,
 	             .all = all,
 	             .running = true};

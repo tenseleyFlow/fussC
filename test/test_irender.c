@@ -115,6 +115,34 @@ void test_render_overlay_help(void)
 	app_free(&a);
 }
 
+void test_render_overlay_remote(void)
+{
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "x", 0);
+	app_reflatten(&a);
+	char *names[] = {"origin", "upstream"};
+	overlay_open_remote(&a.ov, names, 2, NET_PUSH);
+
+	char **f = render_frame(&a, "r", "b", false, 14, 60);
+	bool title = false, both = false, marker = false;
+	for (int i = 0; i < 14; i++) {
+		if (strstr(f[i], "Push to"))
+			title = true;
+		if (strstr(f[i], "origin") && strstr(f[i], "\342\206\222"))
+			marker = true; /* selected remote has the arrow */
+	}
+	/* both remotes listed across the frame */
+	for (int i = 0; i < 14; i++)
+		if (strstr(f[i], "upstream"))
+			both = true;
+	CHECK(title);
+	CHECK(marker);
+	CHECK(both);
+	free_frame(f, 14);
+	app_free(&a);
+}
+
 void test_render_overlay_confirm(void)
 {
 	app a;

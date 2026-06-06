@@ -15,6 +15,9 @@ void overlay_close(overlay *o)
 	o->target[0] = '\0';
 	o->target_untracked = false;
 	o->confirm_op = CONF_DISCARD;
+	o->remote_count = 0;
+	o->remote_sel = 0;
+	o->net_op = NET_PUSH;
 }
 
 static void set_title(overlay *o, const char *t)
@@ -77,6 +80,24 @@ void overlay_open_help(overlay *o)
 	o->amend = false;
 	set_text(o, "");
 	set_title(o, "Keys");
+}
+
+void overlay_open_remote(overlay *o, char *const *names, int count, int net_op)
+{
+	o->kind = OV_REMOTE;
+	set_text(o, "");
+	o->net_op = net_op;
+	o->remote_sel = 0;
+	if (count > OVERLAY_REMOTES_MAX)
+		count = OVERLAY_REMOTES_MAX;
+	o->remote_count = count;
+	for (int i = 0; i < count; i++) {
+		strncpy(o->remotes[i], names[i], sizeof(o->remotes[i]) - 1);
+		o->remotes[i][sizeof(o->remotes[i]) - 1] = '\0';
+	}
+	set_title(o, net_op == NET_PUSH   ? "Push to"
+	             : net_op == NET_PULL ? "Pull from"
+	                                  : "Fetch from");
 }
 
 static bool editable(const overlay *o)

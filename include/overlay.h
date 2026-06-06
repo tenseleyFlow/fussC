@@ -21,7 +21,11 @@ typedef enum {
 	OV_RENAME,  /* rename input */
 	OV_CONFIRM, /* y/n confirmation */
 	OV_HELP,    /* read-only keymap reference */
+	OV_REMOTE,  /* pick a remote for a network op */
 } overlay_kind;
+
+enum { NET_PUSH, NET_PULL, NET_FETCH };
+#define OVERLAY_REMOTES_MAX 8
 
 enum { CONF_DISCARD, CONF_DELETE };
 
@@ -37,6 +41,12 @@ typedef struct {
 	char target[1024];
 	bool target_untracked; /* OV_CONFIRM: target is untracked */
 	int confirm_op;        /* OV_CONFIRM: CONF_DISCARD or CONF_DELETE */
+
+	/* OV_REMOTE: choose a remote for a NET_* op. */
+	char remotes[OVERLAY_REMOTES_MAX][64];
+	int remote_count;
+	int remote_sel;
+	int net_op;
 } overlay;
 
 static inline bool overlay_active(const overlay *o)
@@ -51,6 +61,7 @@ void overlay_open_tag(overlay *o);
 void overlay_open_rename(overlay *o, const char *current);
 void overlay_open_confirm(overlay *o, const char *prompt);
 void overlay_open_help(overlay *o);
+void overlay_open_remote(overlay *o, char *const *names, int count, int net_op);
 
 /* Text editing (no-ops while OV_CONFIRM is up). */
 void overlay_insert(overlay *o, uint32_t cp);
