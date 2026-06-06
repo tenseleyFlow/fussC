@@ -13,6 +13,6 @@ int main(void)
 	RUN(test_xmalloc_zero);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
-		fussy_failures);
+	        fussy_failures);
 	return fussy_failures == 0 ? 0 : 1;
 }

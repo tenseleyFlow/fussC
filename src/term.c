@@ -58,10 +58,10 @@ bool term_init(void)
 	/* Raw mode: no canonical line buffering, no echo, no signal-generating
 	 * keys translated, no CR/NL mangling. One byte minimum per read, no
 	 * inter-byte timer. */
-	raw.c_iflag &= (tcflag_t)~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-	raw.c_oflag &= (tcflag_t)~(OPOST);
+	raw.c_iflag &= (tcflag_t) ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+	raw.c_oflag &= (tcflag_t) ~(OPOST);
 	raw.c_cflag |= (tcflag_t)(CS8);
-	raw.c_lflag &= (tcflag_t)~(ECHO | ICANON | IEXTEN | ISIG);
+	raw.c_lflag &= (tcflag_t) ~(ECHO | ICANON | IEXTEN | ISIG);
 	raw.c_cc[VMIN] = 1;
 	raw.c_cc[VTIME] = 0;
 

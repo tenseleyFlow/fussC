@@ -7,14 +7,15 @@
 
 static void print_usage(FILE *out)
 {
-	fprintf(out,
-		"usage: %s [options]\n"
-		"\n"
-		"  -a, --all      include all tracked files, not just dirty ones\n"
-		"  -p, --print    non-interactive tree output\n"
-		"  -h, --help     show this help and exit\n"
-		"  -V, --version  show version and exit\n",
-		FUSSY_NAME);
+	fprintf(
+	    out,
+	    "usage: %s [options]\n"
+	    "\n"
+	    "  -a, --all      include all tracked files, not just dirty ones\n"
+	    "  -p, --print    non-interactive tree output\n"
+	    "  -h, --help     show this help and exit\n"
+	    "  -V, --version  show version and exit\n",
+	    FUSSY_NAME);
 }
 
 /* Placeholder interactive screen. The real renderer and event loop arrive in
@@ -22,7 +23,8 @@ static void print_usage(FILE *out)
 static int run_interactive(void)
 {
 	if (!term_init()) {
-		fprintf(stderr, "%s: not a terminal (try --print)\n", FUSSY_NAME);
+		fprintf(stderr, "%s: not a terminal (try --print)\n",
+		        FUSSY_NAME);
 		return 1;
 	}
 
@@ -65,8 +67,8 @@ int main(int argc, char **argv)
 
 	if (want_print || !isatty(STDIN_FILENO)) {
 		/* Non-interactive tree output lands in the tree-core sprint. */
-		printf("%s %s: print mode not yet implemented\n",
-		       FUSSY_NAME, FUSSY_VERSION);
+		printf("%s %s: print mode not yet implemented\n", FUSSY_NAME,
+		       FUSSY_VERSION);
 		return 0;
 	}
 

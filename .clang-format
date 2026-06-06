@@ -8,6 +8,7 @@ UseTab: ForIndentation
 BreakBeforeBraces: Linux
 ColumnLimit: 80
 PointerAlignment: Right
+AlignConsecutiveMacros: AcrossComments
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
