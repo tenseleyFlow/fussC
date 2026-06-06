@@ -14,6 +14,8 @@ Requires a C11 compiler, `libgit2`, and POSIX threads. Works with `make` or `gma
 ```sh
 make                 # build the dev binary
 ./fussy
+make test            # build and run the test suite
+make DEBUG=1 test    # ASan + UBSan build of the suite
 sudo make install    # install an optimized, stripped binary (PREFIX=/usr/local)
 ```
 

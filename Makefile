@@ -1,18 +1,30 @@
 # fussC - portable Makefile (works with BSD make and GNU make).
 # Knobs (override on the command line): CC, OPT, DBG, PREFIX, CFLAGS, LDFLAGS,
-#                                       RELOPT, STRIP.
+#                                       RELOPT, STRIP, DEBUG.
 #   make                build fussy (dev build, -O2)
 #   make test           build and run the test suite
-#   make OPT="-O0 -g" DBG="-fsanitize=address,undefined"   sanitizer build
-#   make release        clean optimized stripped binary
-#   make install        install the release binary (PREFIX, DESTDIR honored)
+#   make DEBUG=1 test    ASan+UBSan build of the suite (the common debug build)
+#   make OPT="-O1 -g" DBG="-fsanitize=thread" test   explicit flags (e.g. TSan)
+#   make release         clean optimized stripped binary
+#   make install         install the release binary (PREFIX, DESTDIR honored)
 #   make clean
 
 CC      ?= cc
 PREFIX  ?= /usr/local
 BINDIR   = $(PREFIX)/bin
-OPT     ?= -O2
-DBG     ?=
+
+# DEBUG=1 selects a sanitizer build without spelling out the flags. Selection is
+# by variable indirection - OPT/DBG default to OPT_$(DEBUG)/DBG_$(DEBUG), so an
+# empty DEBUG picks OPT_/DBG_ and DEBUG=1 picks OPT_1/DBG_1. This works in both
+# BSD make and GNU make (plain expansion, no non-portable .if/ifeq). Explicit
+# OPT=/DBG= on the command line still win via ?=. For TSan use the explicit form.
+DEBUG   ?=
+OPT_     = -O2
+OPT_1    = -O0 -g
+DBG_     =
+DBG_1    = -fsanitize=address,undefined
+OPT     ?= $(OPT_$(DEBUG))
+DBG     ?= $(DBG_$(DEBUG))
 RELOPT  ?= -O2 -DNDEBUG
 STRIP   ?= strip
 
