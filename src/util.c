@@ -11,18 +11,22 @@ static void die_oom(void)
 	abort();
 }
 
+/* A 0-size request is bumped to 1 so the result is always a unique, non-NULL,
+ * freeable pointer. That makes the `returns_nonnull` contract sound for every
+ * input (malloc(0)/realloc(_,0) may legally return NULL, which would otherwise
+ * break it) and spares callers a size==0 special case. */
 void *xmalloc(size_t n)
 {
-	void *p = malloc(n);
-	if (p == NULL && n != 0)
+	void *p = malloc(n ? n : 1);
+	if (p == NULL)
 		die_oom();
 	return p;
 }
 
 void *xrealloc(void *p, size_t n)
 {
-	void *q = realloc(p, n);
-	if (q == NULL && n != 0)
+	void *q = realloc(p, n ? n : 1);
+	if (q == NULL)
 		die_oom();
 	return q;
 }

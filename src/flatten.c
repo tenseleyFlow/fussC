@@ -99,7 +99,12 @@ void flat_toggle(flat_list *f, tree *t, uint32_t row, bool hide_dot)
 		flat_reserve(f, f->len + sub.len);
 		memmove(&f->rows[row + 1 + sub.len], &f->rows[row + 1],
 		        (f->len - (row + 1)) * sizeof(*f->rows));
-		memcpy(&f->rows[row + 1], sub.rows, sub.len * sizeof(*f->rows));
+		/* sub.rows is NULL when the dir has no visible children (e.g.
+		 * all dotfiles hidden); memcpy(_, NULL, 0) is UB, so guard it.
+		 */
+		if (sub.len > 0)
+			memcpy(&f->rows[row + 1], sub.rows,
+			       sub.len * sizeof(*f->rows));
 		f->len += sub.len;
 		flat_free(&sub);
 	}

@@ -6,8 +6,9 @@
 
 void test_xstrdup(void)
 {
+	/* xstrdup is returns_nonnull, so a `!= NULL` check would be redundant
+	 * (the compiler/analyzer flag it). We exercise behaviour instead. */
 	char *s = xstrdup("hello");
-	CHECK(s != NULL);
 	CHECK_STR_EQ(s, "hello");
 	/* Independent copy: mutating it must not be undefined behaviour. */
 	s[0] = 'H';
@@ -15,15 +16,16 @@ void test_xstrdup(void)
 	free(s);
 
 	char *empty = xstrdup("");
-	CHECK(empty != NULL);
 	CHECK(empty[0] == '\0');
 	free(empty);
 }
 
 void test_xmalloc_zero(void)
 {
-	/* xmalloc(0) must not abort; the return may be NULL or a valid ptr. */
-	void *p = xmalloc(0);
+	/* xmalloc(0) is bumped to a 1-byte allocation: a usable, freeable,
+	 * non-NULL pointer (the returns_nonnull guarantee). Prove it by use. */
+	unsigned char *p = xmalloc(0);
+	p[0] = 0x7F;
+	CHECK(p[0] == 0x7F);
 	free(p);
-	CHECK(1);
 }
