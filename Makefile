@@ -1,8 +1,11 @@
 # fussC - portable Makefile (works with BSD make and GNU make).
-# Knobs (override on the command line): CC, OPT, DBG, PREFIX, CFLAGS, LDFLAGS.
-#   make                build fussy
+# Knobs (override on the command line): CC, OPT, DBG, PREFIX, CFLAGS, LDFLAGS,
+#                                       RELOPT, STRIP.
+#   make                build fussy (dev build, -O2)
 #   make test           build and run the test suite
 #   make OPT="-O0 -g" DBG="-fsanitize=address,undefined"   sanitizer build
+#   make release        clean optimized stripped binary
+#   make install        install the release binary (PREFIX, DESTDIR honored)
 #   make clean
 
 CC      ?= cc
@@ -10,6 +13,8 @@ PREFIX  ?= /usr/local
 BINDIR   = $(PREFIX)/bin
 OPT     ?= -O2
 DBG     ?=
+RELOPT  ?= -O2 -DNDEBUG
+STRIP   ?= strip
 
 # _DEFAULT_SOURCE exposes POSIX-2008 + BSD extensions (SIGWINCH, strcasecmp,
 # poll, clock_gettime, pthreads) on glibc; on macOS/FreeBSD we simply avoid
@@ -58,11 +63,19 @@ $(TESTBIN): $(TESTOBJS) $(LIBOBJS)
 clean:
 	rm -f $(BIN) $(OBJS) $(TESTBIN) $(TESTOBJS)
 
-install: $(BIN)
+# Clean optimized stripped binary. RELOPT/STRIP are overridable so packagers
+# can inject their own flags or skip stripping (STRIP=: keeps symbols).
+release:
+	$(MAKE) clean
+	$(MAKE) OPT="$(RELOPT)" $(BIN)
+	$(STRIP) $(BIN)
+
+# install always lays down a release build, never a stray debug/sanitizer one.
+install: release
 	mkdir -p $(DESTDIR)$(BINDIR)
 	cp $(BIN) $(DESTDIR)$(BINDIR)/$(BIN)
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BIN)
 
-.PHONY: all test clean install uninstall
+.PHONY: all test clean release install uninstall

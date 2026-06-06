@@ -12,8 +12,9 @@ Status: early development. See `.docs/plan.md` for the roadmap.
 Requires a C11 compiler, `libgit2`, and POSIX threads. Works with `make` or `gmake`.
 
 ```sh
-make
+make                 # build the dev binary
 ./fussy
+sudo make install    # install an optimized, stripped binary (PREFIX=/usr/local)
 ```
 
 ## Usage
@@ -25,8 +26,9 @@ fussy --print    # non-interactive tree output
 fussy --help
 ```
 
-Interactive keys (in progress): `j`/`k` move, arrows expand/collapse and traverse, type a name to
-fuzzy-jump, and a git mode for stage/unstage/commit/push/pull.
+Interactive controls: type a filename to fuzzy-jump (the selection moves as you type); arrows or
+`Ctrl-N`/`Ctrl-P` move among siblings, `Right`/`Ctrl-F` enters a directory, `Left`/`Ctrl-B` goes back
+up, `Space` expands or collapses in place. UPPERCASE letters are git commands; `Q` quits.
 
 ## Portability
 
