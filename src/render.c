@@ -1,9 +1,13 @@
 #include "render.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
+#include "term.h"
 #include "util.h"
+#include "width.h"
 
 /* Small growable string builder. */
 typedef struct {
@@ -96,4 +100,303 @@ void render_tree(FILE *out, const tree *t, const flat_list *f, bool color)
 	char *str = render_tree_string(t, f, color);
 	fputs(str, out);
 	free(str);
+}
+
+/* ---- interactive rendering ---------------------------------------------- */
+
+static void sb_putc(strbuf *s, char c)
+{
+	if (s->len + 2 > s->cap) {
+		s->cap = s->cap ? s->cap * 2 : 64;
+		s->buf = xrealloc(s->buf, s->cap);
+	}
+	s->buf[s->len++] = c;
+	s->buf[s->len] = '\0';
+}
+
+/* Copy `in`, keeping SGR escapes (zero width) but stopping once `cols` display
+ * columns of real glyphs have been emitted. Closes any styling on truncation.
+ */
+static char *clip_to_width(const char *in, int cols)
+{
+	strbuf out = {0};
+	int w = 0;
+	bool truncated = false;
+	const char *p = in;
+
+	while (*p != '\0') {
+		if (*p == 0x1B) { /* ESC [ ... <final> : copy verbatim */
+			sb_putc(&out, *p++);
+			if (*p == '[') {
+				sb_putc(&out, *p++);
+				while (*p && !(*p >= '@' && *p <= '~'))
+					sb_putc(&out, *p++);
+				if (*p)
+					sb_putc(&out, *p++);
+			}
+			continue;
+		}
+		uint32_t cp;
+		int n = utf8_decode(p, &cp);
+		int cw = cp_width(cp);
+		if (w + cw > cols) {
+			truncated = true;
+			break;
+		}
+		for (int i = 0; i < n; i++)
+			sb_putc(&out, p[i]);
+		w += cw;
+		p += n;
+	}
+	if (truncated)
+		sb_put(&out, "\033[0m");
+	return out.buf ? out.buf : xstrdup("");
+}
+
+static char *build_header(const char *repo, const char *branch, const app *a,
+                          bool color)
+{
+	strbuf s = {0};
+	if (color)
+		sb_put(&s, "\033[36m");
+	sb_put(&s, repo ? repo : "");
+	if (color)
+		sb_put(&s, "\033[0m");
+	sb_put(&s, ":");
+	if (color)
+		sb_put(&s, "\033[33m");
+	sb_put(&s, branch ? branch : "");
+	if (color)
+		sb_put(&s, "\033[0m");
+	if (a->filter_len > 0) {
+		sb_put(&s, "  ");
+		if (color)
+			sb_put(&s, "\033[1m");
+		sb_put(&s, "/");
+		sb_put(&s, a->filter);
+		if (color)
+			sb_put(&s, "\033[0m");
+	}
+	return s.buf ? s.buf : xstrdup("");
+}
+
+static char *build_footer(bool color)
+{
+	strbuf s = {0};
+	if (color)
+		sb_put(&s, "\033[90m");
+	sb_put(&s,
+	       "type:filter  \342\206\221\342\206\223 move  "
+	       "\342\206\222 open  \342\206\220 back  Space toggle  Q quit");
+	if (color)
+		sb_put(&s, "\033[0m");
+	return s.buf ? s.buf : xstrdup("");
+}
+
+static char *build_tree_line(const tree *t, uint32_t idx, const bool *lad,
+                             uint16_t depth, bool is_last, bool color,
+                             bool selected, int cols)
+{
+	strbuf c = {0};
+	for (uint16_t a = 0; a < depth; a++)
+		sb_put(&c, lad[a] ? G_BLANK : G_PIPE);
+	sb_put(&c, is_last ? G_ELL : G_TEE);
+
+	const node *n = &t->nodes[idx];
+	if (!node_is_file(n))
+		sb_put(&c, node_is_expanded(n) ? "\342\226\274 "   /* down */
+		                               : "\342\226\266 "); /* right */
+
+	bool use_color = color && !selected;
+	bool ignored = (n->status & ST_GITIGNORED) != 0;
+	if (use_color && ignored)
+		sb_put(&c, "\033[90m");
+	sb_put(&c, n->name);
+	if (use_color && ignored)
+		sb_put(&c, "\033[0m");
+	append_status(&c, n->status, use_color);
+
+	strbuf s = {0};
+	if (selected) {
+		int w = (int)display_width(c.buf ? c.buf : "");
+		if (color)
+			sb_put(&s, "\033[7m");
+		sb_put(&s, c.buf ? c.buf : "");
+		for (int i = w; i < cols; i++)
+			sb_putc(&s, ' ');
+		if (color)
+			sb_put(&s, "\033[0m");
+	} else {
+		sb_put(&s, c.buf ? c.buf : "");
+	}
+	free(c.buf);
+
+	char *clipped = clip_to_width(s.buf ? s.buf : "", cols);
+	free(s.buf);
+	return clipped;
+}
+
+/* is_last[i] = visible row i is the last visible child of its parent. */
+static bool *compute_is_last(const flat_list *f, uint16_t *out_maxd)
+{
+	uint16_t maxd = 0;
+	for (uint32_t i = 0; i < f->len; i++)
+		if (f->rows[i].depth > maxd)
+			maxd = f->rows[i].depth;
+	*out_maxd = maxd;
+	if (f->len == 0)
+		return NULL;
+
+	bool *is_last = xmalloc(f->len * sizeof(*is_last));
+	int *pending = xmalloc((size_t)(maxd + 1) * sizeof(*pending));
+	for (uint16_t k = 0; k <= maxd; k++)
+		pending[k] = -1;
+
+	for (uint32_t i = 0; i < f->len; i++) {
+		uint16_t d = f->rows[i].depth;
+		is_last[i] = true;
+		if (pending[d] >= 0)
+			is_last[pending[d]] = false;
+		pending[d] = (int)i;
+		for (uint16_t k = (uint16_t)(d + 1); k <= maxd; k++)
+			pending[k] = -1;
+	}
+	free(pending);
+	return is_last;
+}
+
+char **render_frame(const app *a, const char *repo, const char *branch,
+                    bool color, int rows, int cols)
+{
+	char **lines = xmalloc((size_t)rows * sizeof(*lines));
+	for (int r = 0; r < rows; r++)
+		lines[r] = NULL;
+
+	if (rows >= 1) {
+		char *h = build_header(repo, branch, a, color);
+		lines[0] = clip_to_width(h, cols);
+		free(h);
+	}
+
+	int tree_top = 1;
+	int tree_h = rows - 2; /* rows minus header and footer */
+	if (tree_h < 0)
+		tree_h = 0;
+
+	const flat_list *f = &a->visible;
+	uint16_t maxd = 0;
+	bool *is_last = compute_is_last(f, &maxd);
+	bool *lad =
+	    (maxd + 1) ? xmalloc((size_t)(maxd + 1) * sizeof(bool)) : NULL;
+	for (uint16_t k = 0; k <= maxd; k++)
+		if (lad)
+			lad[k] = false;
+
+	int len = (int)f->len;
+	int start = 0;
+	if (len > tree_h) {
+		start = (int)a->selected - tree_h / 2;
+		if (start < 0)
+			start = 0;
+		if (start > len - tree_h)
+			start = len - tree_h;
+	}
+
+	/* Advance the ancestor-last state up to the first visible row. */
+	for (int i = 0; i < start && i < len; i++)
+		if (lad)
+			lad[f->rows[i].depth] = is_last[i];
+
+	for (int r = 0; r < tree_h; r++) {
+		int vis = start + r;
+		int row = tree_top + r;
+		if (vis < len) {
+			uint16_t d = f->rows[vis].depth;
+			if (lad)
+				lad[d] = is_last[vis];
+			lines[row] = build_tree_line(
+			    &a->t, f->rows[vis].node, lad, d, is_last[vis],
+			    color, vis == (int)a->selected, cols);
+		} else {
+			lines[row] = xstrdup("");
+		}
+	}
+
+	if (rows >= 2) {
+		char *ft = build_footer(color);
+		lines[rows - 1] = clip_to_width(ft, cols);
+		free(ft);
+	}
+
+	free(is_last);
+	free(lad);
+	return lines;
+}
+
+void free_frame(char **lines, int rows)
+{
+	if (!lines)
+		return;
+	for (int r = 0; r < rows; r++)
+		free(lines[r]);
+	free(lines);
+}
+
+int frame_diff(char *const *oldf, char *const *newf, int rows, FILE *out)
+{
+	int changed = 0;
+	for (int r = 0; r < rows; r++) {
+		const char *o = oldf ? oldf[r] : NULL;
+		if (o == NULL || strcmp(o, newf[r]) != 0) {
+			fprintf(out, "\033[%d;1H\033[2K%s", r + 1, newf[r]);
+			changed++;
+		}
+	}
+	return changed;
+}
+
+void screen_init(screen *s)
+{
+	s->prev = NULL;
+	s->rows = 0;
+}
+
+void screen_free(screen *s)
+{
+	free_frame(s->prev, s->rows);
+	s->prev = NULL;
+	s->rows = 0;
+}
+
+void screen_draw(screen *s, const app *a, const char *repo, const char *branch,
+                 bool color)
+{
+	int rows, cols;
+	term_size(&rows, &cols);
+
+	bool full = (s->prev == NULL || s->rows != rows);
+	if (full) {
+		free_frame(s->prev, s->rows);
+		s->prev = NULL;
+		s->rows = rows;
+	}
+
+	char **frame = render_frame(a, repo, branch, color, rows, cols);
+
+	char *buf = NULL;
+	size_t blen = 0;
+	FILE *m = open_memstream(&buf, &blen);
+	if (m) {
+		if (full)
+			fputs("\033[2J", m);
+		frame_diff(s->prev, frame, rows, m);
+		fclose(m);
+		if (blen > 0 && write(STDOUT_FILENO, buf, blen) < 0)
+			(void)0;
+	}
+	free(buf);
+
+	free_frame(s->prev, s->rows);
+	s->prev = frame;
+	s->rows = rows;
 }

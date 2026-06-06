@@ -32,6 +32,11 @@ void test_nav_right_left(void);
 void test_nav_dotfiles(void);
 void test_toggle_matches_oracle(void);
 void test_nav_filter_buffer(void);
+void test_render_frame_layout(void);
+void test_render_frame_selection(void);
+void test_render_frame_filter_in_header(void);
+void test_frame_diff_minimal(void);
+void test_frame_diff_full_paint(void);
 
 int main(void)
 {
@@ -63,6 +68,11 @@ int main(void)
 	RUN(test_nav_dotfiles);
 	RUN(test_toggle_matches_oracle);
 	RUN(test_nav_filter_buffer);
+	RUN(test_render_frame_layout);
+	RUN(test_render_frame_selection);
+	RUN(test_render_frame_filter_in_header);
+	RUN(test_frame_diff_minimal);
+	RUN(test_frame_diff_full_paint);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);

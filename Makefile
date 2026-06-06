@@ -37,7 +37,7 @@ TESTBIN  = test/run
 TESTOBJS = test/test_main.o test/test_util.o test/test_status.o \
            test/test_tree.o test/test_flatten.o test/test_git.o \
            test/test_render.o test/test_width.o test/test_key.o \
-           test/test_nav.o
+           test/test_nav.o test/test_irender.o
 
 .SUFFIXES: .c .o
 .c.o:
