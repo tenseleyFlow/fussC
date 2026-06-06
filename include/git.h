@@ -55,6 +55,9 @@ typedef struct {
 /* Walk from HEAD newest-first, up to `max` commits (0 = no cap). Returns an
  * empty list on an unborn/empty repo. Free with git_log_free. */
 git_log_list git_log(git_ctx *g, int max);
+/* Like git_log but across all local branches (for cherry-pick, which reaches
+ * commits not on HEAD). */
+git_log_list git_log_all(git_ctx *g, int max);
 void git_log_free(git_log_list *l);
 
 /* HEAD's reflog as the same list shape (newest first, up to `max`): `lines[i]`
@@ -114,6 +117,13 @@ enum { RESET_MIXED, RESET_SOFT, RESET_HARD };
  * (destructive). 0 on success, else -1 with a message. */
 int gitop_reset(git_ctx *g, const char *rev, int mode, char *err,
                 size_t errlen);
+
+/* Cherry-pick `rev` onto HEAD and commit it (keeping the original author and
+ * message). Revert applies the inverse and commits a "Revert ..." commit. Both
+ * abort to a clean state on conflict (a TUI can't safely drive a resolution).
+ * 0 on success, else -1 with a message. */
+int gitop_cherrypick(git_ctx *g, const char *rev, char *err, size_t errlen);
+int gitop_revert(git_ctx *g, const char *rev, char *err, size_t errlen);
 
 /*
  * Local mutations, all libgit2 in-process so the index is touched by ONE

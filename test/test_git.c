@@ -463,6 +463,74 @@ void test_git_reset(void)
 	cleanup(dir);
 }
 
+void test_git_cherrypick_revert(void)
+{
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_cherrypick_revert (no git)\n");
+		return;
+	}
+
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "gitcp");
+
+	/* master has a.txt; a side branch adds b.txt. Cherry-pick the side
+	 * commit onto master, then revert it. */
+	char cmd[2600];
+	snprintf(cmd, sizeof(cmd),
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && "
+	         "git -c init.defaultBranch=master init -q && "
+	         "git config user.email t@t && git config user.name t && "
+	         "printf a > a.txt && git add a.txt && git commit -qm base && "
+	         "git checkout -q -b side && "
+	         "printf b > b.txt && git add b.txt && git commit -qm addb && "
+	         "git checkout -q master",
+	         dir, dir, dir);
+	CHECK(system(cmd) == 0);
+
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(dir) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err, sizeof(err))) {
+		char bpath[320];
+		snprintf(bpath, sizeof(bpath), "%s/b.txt", dir);
+
+		/* All-branches log reaches side's commit; HEAD-only does not.
+		 */
+		git_log_list all = git_log_all(&g, 0);
+		git_log_list head = git_log(&g, 0);
+		CHECK(all.count > head.count);
+		git_log_free(&all);
+		git_log_free(&head);
+
+		/* Cherry-pick side's commit: b.txt appears, a new commit lands.
+		 */
+		CHECK(gitop_cherrypick(&g, "side", err, sizeof(err)) == 0);
+		CHECK(access(bpath, F_OK) == 0); /* b.txt now present */
+		git_log_list l1 = git_log(&g, 0);
+		CHECK(l1.count == 2); /* base + cherry-picked */
+		if (l1.count >= 1)
+			CHECK(strstr(l1.lines[0], "addb") != NULL);
+		git_log_free(&l1);
+
+		/* Revert it: b.txt goes away, another commit lands. */
+		CHECK(gitop_revert(&g, "HEAD", err, sizeof(err)) == 0);
+		CHECK(access(bpath, F_OK) != 0); /* b.txt removed */
+		git_log_list l2 = git_log(&g, 0);
+		CHECK(l2.count == 3);
+		if (l2.count >= 1)
+			CHECK(strstr(l2.lines[0], "Revert") != NULL);
+		git_log_free(&l2);
+
+		git_close(&g);
+	}
+
+	CHECK(chdir(cwd) == 0);
+	cleanup(dir);
+}
+
 void test_git_not_a_repo(void)
 {
 	char dir[256];

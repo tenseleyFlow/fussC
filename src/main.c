@@ -578,6 +578,50 @@ static void browse_reset(loopctx *L)
 	git_log_free(&log);
 }
 
+/* Pick a commit (git-show preview) and run a libgit2 op on it (cherry-pick /
+ * revert), then refresh. Takes ownership of `log` (the caller chooses the
+ * commit set: all branches for cherry-pick, HEAD history for revert). */
+static void browse_pick_apply(loopctx *L, const char *title, git_log_list log,
+                              int (*op)(git_ctx *, const char *, char *,
+                                        size_t),
+                              const char *okmsg)
+{
+	if (log.count == 0) {
+		set_status(L->a, "no commits");
+		git_log_free(&log);
+		return;
+	}
+	struct commit_preview_ctx pc = {.log = &log, .color = L->color};
+	picker_spec sp = {.title = title,
+	                  .items = log.lines,
+	                  .count = log.count,
+	                  .preview = commit_preview,
+	                  .preview_ctx = &pc};
+	picker_result r = picker_run(L->s, &sp, L->color);
+	if (r.key == KEY_ENTER && r.index >= 0) {
+		char err[256];
+		if (op(L->g, log.shas[r.index], err, sizeof(err)) != 0)
+			set_status(L->a, err);
+		else {
+			do_refresh(L);
+			set_status(L->a, okmsg);
+		}
+	}
+	git_log_free(&log);
+}
+
+static void browse_cherrypick(loopctx *L)
+{
+	browse_pick_apply(L, "Cherry-pick onto HEAD", git_log_all(L->g, 5000),
+	                  gitop_cherrypick, "cherry-picked");
+}
+
+static void browse_revert(loopctx *L)
+{
+	browse_pick_apply(L, "Revert commit", git_log(L->g, 5000), gitop_revert,
+	                  "reverted");
+}
+
 /* Blame the currently-selected file: `git blame --color-by-age` rendered in
  * paige (age-colored, wrapped). Operates on the main tree's selection. */
 static void browse_blame(loopctx *L)
@@ -636,8 +680,9 @@ static void browse_blame(loopctx *L)
  * widget). Scales as browsers are added without spending a key on each. */
 static void browse_menu(loopctx *L)
 {
-	char *items[] = {"Commits", "Reflog", "Branches",
-	                 "Stashes", "Reset",  "Blame current file"};
+	char *items[] = {
+	    "Commits", "Reflog",      "Branches", "Stashes",
+	    "Reset",   "Cherry-pick", "Revert",   "Blame current file"};
 	picker_spec sp = {.title = "Browse",
 	                  .items = items,
 	                  .count = (int)(sizeof(items) / sizeof(*items))};
@@ -661,6 +706,12 @@ static void browse_menu(loopctx *L)
 		browse_reset(L);
 		break;
 	case 5:
+		browse_cherrypick(L);
+		break;
+	case 6:
+		browse_revert(L);
+		break;
+	case 7:
 		browse_blame(L);
 		break;
 	default:

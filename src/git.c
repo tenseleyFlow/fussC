@@ -660,22 +660,11 @@ void git_mark_incoming(git_ctx *g, tree *t)
 
 /* ---- history (revwalk) --------------------------------------------------- */
 
-git_log_list git_log(git_ctx *g, int max)
+/* Drain a prepared revwalk (caller pushed its start point(s) + set sorting)
+ * into a git_log_list. Frees the walk. */
+static git_log_list log_collect(git_ctx *g, git_revwalk *w, int max)
 {
 	git_log_list out = {0};
-
-	git_revwalk *w = NULL;
-	if (git_revwalk_new(&w, g->repo) != 0)
-		return out;
-	/* Topological first so a commit always precedes its parents (stable
-	 * even when commits share a timestamp), then by time to order across
-	 * branches. */
-	git_revwalk_sorting(w, GIT_SORT_TOPOLOGICAL | GIT_SORT_TIME);
-	if (git_revwalk_push_head(w) != 0) { /* unborn / empty repo */
-		git_revwalk_free(w);
-		return out;
-	}
-
 	int cap = 0;
 	git_oid oid;
 	while (git_revwalk_next(&oid, w) == 0) {
@@ -713,6 +702,37 @@ git_log_list git_log(git_ctx *g, int max)
 
 	git_revwalk_free(w);
 	return out;
+}
+
+/* Topological first so a commit always precedes its parents (stable even when
+ * commits share a timestamp), then by time to order across branches. */
+#define LOG_SORT (GIT_SORT_TOPOLOGICAL | GIT_SORT_TIME)
+
+git_log_list git_log(git_ctx *g, int max)
+{
+	git_revwalk *w = NULL;
+	if (git_revwalk_new(&w, g->repo) != 0)
+		return (git_log_list){0};
+	git_revwalk_sorting(w, LOG_SORT);
+	if (git_revwalk_push_head(w) != 0) { /* unborn / empty repo */
+		git_revwalk_free(w);
+		return (git_log_list){0};
+	}
+	return log_collect(g, w, max);
+}
+
+git_log_list git_log_all(git_ctx *g, int max)
+{
+	git_revwalk *w = NULL;
+	if (git_revwalk_new(&w, g->repo) != 0)
+		return (git_log_list){0};
+	git_revwalk_sorting(w, LOG_SORT);
+	/* Every local branch, so cherry-pick can reach commits off HEAD. */
+	if (git_revwalk_push_glob(w, "refs/heads/*") != 0) {
+		git_revwalk_free(w);
+		return (git_log_list){0};
+	}
+	return log_collect(g, w, max);
 }
 
 void git_log_free(git_log_list *l)
@@ -1053,4 +1073,157 @@ int gitop_reset(git_ctx *g, const char *rev, int mode, char *err, size_t errlen)
 		return -1;
 	}
 	return 0;
+}
+
+/* ---- cherry-pick / revert ------------------------------------------------ */
+
+/* Commit the current index on top of HEAD. Returns 0 on success, 1 if the index
+ * has conflicts (caller aborts), -1 on a hard error. */
+static int commit_from_index(git_repository *repo, const git_signature *author,
+                             const git_signature *committer,
+                             const char *message, char *err, size_t errlen)
+{
+	git_index *idx = NULL;
+	if (git_repository_index(&idx, repo) != 0) {
+		copy_err(err, errlen, "open index failed");
+		return -1;
+	}
+	if (git_index_has_conflicts(idx) != 0) {
+		git_index_free(idx);
+		return 1;
+	}
+	git_oid tree_oid;
+	int rc = git_index_write_tree(&tree_oid, idx);
+	git_index_free(idx);
+	if (rc != 0) {
+		copy_err(err, errlen, "write tree failed");
+		return -1;
+	}
+
+	git_tree *tree = NULL;
+	git_reference *head = NULL;
+	git_commit *parent = NULL;
+	if (git_tree_lookup(&tree, repo, &tree_oid) != 0 ||
+	    git_repository_head(&head, repo) != 0 ||
+	    git_reference_peel((git_object **)&parent, head,
+	                       GIT_OBJECT_COMMIT) != 0) {
+		git_tree_free(tree);
+		git_reference_free(head);
+		copy_err(err, errlen, "resolve HEAD failed");
+		return -1;
+	}
+	git_reference_free(head);
+
+	git_oid commit_oid;
+	const git_commit *parents[1] = {parent};
+	rc = git_commit_create(&commit_oid, repo, "HEAD", author, committer,
+	                       NULL, message, tree, 1, parents);
+	git_tree_free(tree);
+	git_commit_free(parent);
+	if (rc != 0) {
+		copy_err(err, errlen, "commit failed");
+		return -1;
+	}
+	return 0;
+}
+
+/* Reset the worktree/index back to HEAD and clear any in-progress op state. */
+static void abort_to_head(git_repository *repo)
+{
+	git_object *head = NULL;
+	if (git_revparse_single(&head, repo, "HEAD") == 0) {
+		git_reset(repo, head, GIT_RESET_HARD, NULL);
+		git_object_free(head);
+	}
+	git_repository_state_cleanup(repo);
+}
+
+static int resolve_commit(git_repository *repo, const char *rev,
+                          git_commit **out)
+{
+	git_object *obj = NULL;
+	if (git_revparse_single(&obj, repo, rev) != 0)
+		return -1;
+	int rc = git_object_peel((git_object **)out, obj, GIT_OBJECT_COMMIT);
+	git_object_free(obj);
+	return rc;
+}
+
+int gitop_cherrypick(git_ctx *g, const char *rev, char *err, size_t errlen)
+{
+	git_commit *pick = NULL;
+	if (resolve_commit(g->repo, rev, &pick) != 0) {
+		copy_err(err, errlen, "no such commit");
+		return -1;
+	}
+	if (git_cherrypick(g->repo, pick, NULL) != 0) {
+		git_commit_free(pick);
+		copy_err(err, errlen, "cherry-pick failed");
+		return -1;
+	}
+
+	git_signature *committer = NULL;
+	if (git_signature_default(&committer, g->repo) != 0) {
+		git_commit_free(pick);
+		abort_to_head(g->repo);
+		copy_err(err, errlen, "set user.name and user.email");
+		return -1;
+	}
+	int rc = commit_from_index(g->repo, git_commit_author(pick), committer,
+	                           git_commit_message(pick), err, errlen);
+	git_signature_free(committer);
+	git_commit_free(pick);
+
+	if (rc == 1) {
+		abort_to_head(g->repo);
+		copy_err(err, errlen, "cherry-pick conflicts (aborted)");
+		return -1;
+	}
+	git_repository_state_cleanup(g->repo);
+	return rc;
+}
+
+int gitop_revert(git_ctx *g, const char *rev, char *err, size_t errlen)
+{
+	git_commit *target = NULL;
+	if (resolve_commit(g->repo, rev, &target) != 0) {
+		copy_err(err, errlen, "no such commit");
+		return -1;
+	}
+	if (git_revert(g->repo, target, NULL) != 0) {
+		git_commit_free(target);
+		copy_err(err, errlen, "revert failed");
+		return -1;
+	}
+
+	git_signature *sig = NULL;
+	if (git_signature_default(&sig, g->repo) != 0) {
+		git_commit_free(target);
+		abort_to_head(g->repo);
+		copy_err(err, errlen, "set user.name and user.email");
+		return -1;
+	}
+	char full[GIT_OID_HEXSZ + 1];
+	git_oid_tostr(full, sizeof(full), git_commit_id(target));
+	const char *summary = git_commit_summary(target);
+	int len =
+	    snprintf(NULL, 0, "Revert \"%s\"\n\nThis reverts commit %s.\n",
+	             summary ? summary : "", full);
+	char *msg = xmalloc((size_t)len + 1);
+	snprintf(msg, (size_t)len + 1,
+	         "Revert \"%s\"\n\nThis reverts commit %s.\n",
+	         summary ? summary : "", full);
+
+	int rc = commit_from_index(g->repo, sig, sig, msg, err, errlen);
+	free(msg);
+	git_signature_free(sig);
+	git_commit_free(target);
+
+	if (rc == 1) {
+		abort_to_head(g->repo);
+		copy_err(err, errlen, "revert conflicts (aborted)");
+		return -1;
+	}
+	git_repository_state_cleanup(g->repo);
+	return rc;
 }
