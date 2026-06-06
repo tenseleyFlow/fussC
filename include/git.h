@@ -34,6 +34,13 @@ void git_close(git_ctx *g);
 int git_load_tree(git_ctx *g, tree *t, bool all);
 
 /*
+ * OR ST_INCOMING onto every path the fetched upstream changed relative to HEAD,
+ * giving those nodes a down glyph. No-op when there is no upstream. Run after
+ * git_load_tree so it merges into the already-populated arena.
+ */
+void git_mark_incoming(git_ctx *g, tree *t);
+
+/*
  * Local mutations, all libgit2 in-process so the index is touched by ONE
  * mechanism (fixing fussr's libgit2/subprocess split). Each returns 0 on
  * success or -1 with a terse message in errbuf. Paths are repo-relative.

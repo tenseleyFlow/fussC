@@ -126,8 +126,12 @@ int git_load_tree(git_ctx *g, tree *t, bool all)
 	git_status_options opts;
 	git_status_options_init(&opts, GIT_STATUS_OPTIONS_VERSION);
 	opts.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
+	/* Include ignored paths so they render dimmed, but do NOT recurse into
+	 * ignored dirs: one node per top-level ignored path (e.g. "build/"),
+	 * not a flood of every artifact under it. */
 	opts.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED |
-	             GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS;
+	             GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS |
+	             GIT_STATUS_OPT_INCLUDE_IGNORED;
 
 	git_status_list *list = NULL;
 	if (git_status_list_new(&list, repo, &opts) != 0)
@@ -593,4 +597,49 @@ int gitnet_fetch(git_ctx *g, const char *remote, char *msg, size_t msglen)
 	}
 	char *argv[] = {"git", "fetch", NULL};
 	return run_git(argv, "fetched", msg, msglen);
+}
+
+/* Peel a ref to its tree (commit -> tree). Caller frees. */
+static git_tree *peel_tree(git_reference *ref)
+{
+	git_object *obj = NULL;
+	if (git_reference_peel(&obj, ref, GIT_OBJECT_TREE) != 0)
+		return NULL;
+	return (git_tree *)obj;
+}
+
+/* OR ST_INCOMING onto every path that the (already-fetched) upstream changed
+ * relative to HEAD, so the tree shows a down glyph for what a pull would bring.
+ * No-ops silently when there is no upstream. */
+void git_mark_incoming(git_ctx *g, tree *t)
+{
+	git_reference *head = NULL, *up = NULL;
+	if (git_repository_head(&head, g->repo) != 0)
+		return;
+	if (git_branch_upstream(&up, head) != 0) {
+		git_reference_free(head);
+		return;
+	}
+	git_tree *ht = peel_tree(head);
+	git_tree *ut = peel_tree(up);
+	git_reference_free(head);
+	git_reference_free(up);
+	if (ht == NULL || ut == NULL) {
+		git_tree_free(ht);
+		git_tree_free(ut);
+		return;
+	}
+
+	git_diff *diff = NULL;
+	if (git_diff_tree_to_tree(&diff, g->repo, ht, ut, NULL) == 0) {
+		size_t nd = git_diff_num_deltas(diff);
+		for (size_t i = 0; i < nd; i++) {
+			const git_diff_delta *d = git_diff_get_delta(diff, i);
+			if (d != NULL && d->new_file.path != NULL)
+				tree_add(t, d->new_file.path, ST_INCOMING);
+		}
+		git_diff_free(diff);
+	}
+	git_tree_free(ht);
+	git_tree_free(ut);
 }

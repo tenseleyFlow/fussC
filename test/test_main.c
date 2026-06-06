@@ -15,6 +15,8 @@ void test_flatten_expanded(void);
 void test_flatten_collapsed(void);
 void test_flatten_empty(void);
 void test_git_status(void);
+void test_git_ignored(void);
+void test_git_incoming(void);
 void test_git_not_a_repo(void);
 void test_gitop_stage_unstage(void);
 void test_gitop_stage_all(void);
@@ -87,6 +89,8 @@ int main(void)
 	RUN(test_flatten_collapsed);
 	RUN(test_flatten_empty);
 	RUN(test_git_status);
+	RUN(test_git_ignored);
+	RUN(test_git_incoming);
 	RUN(test_git_not_a_repo);
 	RUN(test_gitop_stage_unstage);
 	RUN(test_gitop_stage_all);

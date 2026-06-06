@@ -89,6 +89,106 @@ void test_git_status(void)
 	cleanup(dir);
 }
 
+void test_git_ignored(void)
+{
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_ignored (no git CLI)\n");
+		return;
+	}
+
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "gitign");
+
+	/* An ignored directory must surface as a single dimmed node, not a
+	 * flood of every artifact under it. */
+	char cmd[2300];
+	snprintf(cmd, sizeof(cmd),
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && git init -q && "
+	         "printf 'build/\\n' > .gitignore && "
+	         "mkdir build && printf x > build/a.o && printf y > build/b.o",
+	         dir, dir, dir);
+	CHECK(system(cmd) == 0);
+
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(dir) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err, sizeof(err))) {
+		tree t;
+		tree_init(&t);
+		CHECK(git_load_tree(&g, &t, false) == 0);
+
+		CHECK(has_bit(&t, "build", ST_GITIGNORED));
+		/* Not recursed: the artifacts under build/ are absent. */
+		CHECK(tree_find(&t, "build/a.o") == NODE_NIL);
+		CHECK(tree_find(&t, "build/b.o") == NODE_NIL);
+
+		tree_free(&t);
+		git_close(&g);
+	}
+
+	CHECK(chdir(cwd) == 0);
+	cleanup(dir);
+}
+
+void test_git_incoming(void)
+{
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_incoming (no git CLI)\n");
+		return;
+	}
+
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "gitinc");
+
+	/* A bare remote, a clone that commits + pushes (the "upstream" change),
+	 * and our working clone that only fetches. git_mark_incoming must flag
+	 * exactly what the fetched upstream changed relative to HEAD. */
+	char cmd[3000];
+	snprintf(
+	    cmd, sizeof(cmd),
+	    "rm -rf '%s' && mkdir -p '%s' && cd '%s' && "
+	    "git -c init.defaultBranch=master init -q --bare bare && "
+	    "git -c init.defaultBranch=master clone -q bare up && cd up && "
+	    "git config user.email t@t && git config user.name t && "
+	    "printf one > a.txt && git add a.txt && git commit -qm init && "
+	    "git push -q -u origin master && cd '%s' && "
+	    "git clone -q bare work && cd work && "
+	    "git config user.email t@t && git config user.name t && "
+	    "cd '%s/up' && printf onemore > a.txt && printf two > b.txt && "
+	    "git add -A && git commit -qm upstream && git push -q && "
+	    "cd '%s/work' && git fetch -q",
+	    dir, dir, dir, dir, dir, dir);
+	CHECK(system(cmd) == 0);
+
+	char workdir[320];
+	snprintf(workdir, sizeof(workdir), "%s/work", dir);
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(workdir) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err, sizeof(err))) {
+		tree t;
+		tree_init(&t);
+		CHECK(git_load_tree(&g, &t, true) == 0);
+		git_mark_incoming(&g, &t);
+
+		CHECK(
+		    has_bit(&t, "a.txt", ST_INCOMING)); /* modified upstream */
+		CHECK(has_bit(&t, "b.txt", ST_INCOMING)); /* added upstream */
+
+		tree_free(&t);
+		git_close(&g);
+	}
+
+	CHECK(chdir(cwd) == 0);
+	cleanup(dir);
+}
+
 void test_git_not_a_repo(void)
 {
 	char dir[256];

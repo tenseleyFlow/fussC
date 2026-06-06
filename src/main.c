@@ -47,6 +47,7 @@ static int run_print(bool all)
 		git_close(&g);
 		return 1;
 	}
+	git_mark_incoming(&g, &t);
 
 	flat_list f;
 	flat_init(&f);
@@ -115,8 +116,10 @@ static void do_refresh(loopctx *L)
 		fuzzy_engine_pause(L->eng);
 	tree_free(&a->t);
 	tree_init(&a->t);
-	if (L->have_repo)
+	if (L->have_repo) {
 		git_load_tree(L->g, &a->t, L->all);
+		git_mark_incoming(L->g, &a->t);
+	}
 	app_collapse_paths(a, collapsed, ncol);
 	if (L->eng)
 		fuzzy_engine_resume(L->eng);
@@ -541,8 +544,10 @@ static int run_interactive(bool all)
 	git_ctx g;
 	char err[256];
 	bool have_repo = git_open(&g, err, sizeof(err));
-	if (have_repo)
+	if (have_repo) {
 		git_load_tree(&g, &a.t, all);
+		git_mark_incoming(&g, &a.t);
+	}
 	app_reflatten(&a);
 
 	const char *repo = have_repo ? g.repo_name : "(not a repo)";
