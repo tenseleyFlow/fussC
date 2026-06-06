@@ -78,6 +78,7 @@ void test_proc_stderr_and_exit(void);
 void test_proc_large_output(void);
 void test_proc_spawn_failure(void);
 void test_gitnet_push_fetch_pull(void);
+void test_gitnet_missing_git(void);
 
 int main(void)
 {
@@ -155,6 +156,7 @@ int main(void)
 	RUN(test_proc_large_output);
 	RUN(test_proc_spawn_failure);
 	RUN(test_gitnet_push_fetch_pull);
+	RUN(test_gitnet_missing_git);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);

@@ -38,6 +38,12 @@ static char *buf_take(struct buf *b)
 
 int proc_run(char *const argv[], char **out, char **err)
 {
+	/* Assign up front so every early-return path satisfies the contract
+	 * that the outputs are always set (callers free them unconditionally).
+	 */
+	*out = NULL;
+	*err = NULL;
+
 	int op[2], ep[2];
 	if (pipe(op) != 0)
 		return -1;

@@ -94,3 +94,57 @@ void test_gitnet_push_fetch_pull(void)
 	int rc = system(cmd);
 	(void)rc;
 }
+
+/* When the `git` binary cannot be spawned (it is missing from PATH), a network
+ * op must fail gracefully with a clear message - never crash on NULL output. */
+void test_gitnet_missing_git(void)
+{
+	if (!have_git()) {
+		fprintf(stderr,
+		        "  SKIP test_gitnet_missing_git (no git CLI)\n");
+		return;
+	}
+
+	char base[256];
+	snprintf(base, sizeof(base), "/tmp/fussy_nogit_%ld", (long)getpid());
+	char cmd[2048];
+	snprintf(cmd, sizeof(cmd),
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && git init -q && "
+	         "git config user.email t@t && git config user.name t && "
+	         "printf a > f.txt && git add f.txt && git commit -q -m init",
+	         base, base, base);
+	CHECK(system(cmd) == 0);
+
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(base) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err,
+	             sizeof(err))) { /* libgit2 open needs no git binary */
+		char *saved = getenv("PATH");
+		char *path_copy = saved ? strdup(saved) : NULL;
+		setenv("PATH", "/fussy_nonexistent_dir", 1);
+
+		char msg[256] = "x";
+		int frc = gitnet_fetch(&g, NULL, msg, sizeof(msg));
+		CHECK(frc == -1);
+		CHECK_STR_EQ(msg, "could not run git");
+
+		if (path_copy) {
+			setenv("PATH", path_copy, 1);
+			free(path_copy);
+		} else {
+			unsetenv("PATH");
+		}
+		git_close(&g);
+	} else {
+		CHECK(0);
+	}
+
+	CHECK(chdir(cwd) == 0);
+	snprintf(cmd, sizeof(cmd), "rm -rf '%s'", base);
+	int crc = system(cmd);
+	(void)crc;
+}

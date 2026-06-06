@@ -538,6 +538,16 @@ static void net_message(int rc, const char *out, const char *err,
 		snprintf(msg, msglen, "%s", ok);
 		return;
 	}
+	if (rc < 0) { /* proc_run could not spawn git (out/err are NULL) */
+		snprintf(msg, msglen, "could not run git");
+		return;
+	}
+	/* From here git ran and exited non-zero; out/err are valid strings, but
+	 * stay defensive in case a future caller passes NULL. */
+	if (err == NULL)
+		err = "";
+	if (out == NULL)
+		out = "";
 	if (strstr(err, "no upstream") || strstr(err, "has no upstream"))
 		snprintf(msg, msglen, "no upstream set");
 	else if (strstr(err, "Could not read from remote") ||

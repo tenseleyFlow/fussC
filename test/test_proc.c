@@ -43,10 +43,19 @@ void test_proc_large_output(void)
 void test_proc_spawn_failure(void)
 {
 	char *argv[] = {"fussy_no_such_program_xyz", NULL};
-	char *out = NULL, *err = NULL;
+	/* Pre-seed with garbage to prove proc_run overwrites both regardless.
+	 */
+	char *out = (char *)1, *err = (char *)1;
 	int rc = proc_run(argv, &out, &err);
 	/* Either posix_spawnp fails (-1) or the child execs and exits 127. */
 	CHECK(rc != 0);
+	/* Contract: out/err are always assigned. On a spawn failure (-1) they
+	 * are NULL; if the shell exec'd and exited 127 they are heap strings.
+	 */
+	if (rc < 0) {
+		CHECK(out == NULL);
+		CHECK(err == NULL);
+	}
 	free(out);
 	free(err);
 }
