@@ -21,67 +21,86 @@ static void build(app *a)
 	app_reflatten(a);
 }
 
-void test_nav_updown(void)
+void test_nav_siblings(void)
 {
 	app a;
-	build(&a);
+	build(&a); /* visible: a, b, c, d, e (b expanded with c,d) */
 	CHECK(a.visible.len == 5);
 	CHECK_STR_EQ(sel_name(&a), "a");
 
+	/* Down moves among depth-0 siblings, skipping b's children c,d. */
 	app_down(&a);
 	CHECK_STR_EQ(sel_name(&a), "b");
 	app_down(&a);
-	CHECK_STR_EQ(sel_name(&a), "c");
+	CHECK_STR_EQ(sel_name(&a), "e"); /* skips c and d */
+	app_down(&a);                    /* clamp: e is the last sibling */
+	CHECK_STR_EQ(sel_name(&a), "e");
+
 	app_up(&a);
 	CHECK_STR_EQ(sel_name(&a), "b");
-
-	app_end(&a);
-	CHECK_STR_EQ(sel_name(&a), "e");
-	app_down(&a); /* clamp at bottom */
-	CHECK_STR_EQ(sel_name(&a), "e");
-	app_home(&a);
+	app_up(&a);
 	CHECK_STR_EQ(sel_name(&a), "a");
-	app_up(&a); /* clamp at top */
+	app_up(&a); /* clamp at first sibling */
 	CHECK_STR_EQ(sel_name(&a), "a");
 
 	app_free(&a);
 }
 
-void test_nav_right_left(void)
+void test_nav_enter_and_back(void)
 {
 	app a;
 	build(&a);
 
 	/* Right on a file is a no-op. */
-	CHECK_STR_EQ(sel_name(&a), "a");
 	app_right(&a);
 	CHECK_STR_EQ(sel_name(&a), "a");
 
-	/* Right on an expanded dir steps into its first child. */
+	/* Right enters b (expanded) -> first child c. */
 	app_down(&a); /* b */
 	app_right(&a);
 	CHECK_STR_EQ(sel_name(&a), "c");
 
-	/* Left from a child returns to the parent dir. */
+	/* Inside the dir, Down/Up move among children only. */
+	app_down(&a);
+	CHECK_STR_EQ(sel_name(&a), "d");
+	app_down(&a); /* clamp: d is the last child */
+	CHECK_STR_EQ(sel_name(&a), "d");
+
+	/* Left returns to the parent dir. */
 	app_left(&a);
 	CHECK_STR_EQ(sel_name(&a), "b");
 
-	/* Left on an expanded dir collapses it; selection stays on the dir. */
+	/* Left on the expanded dir collapses it; selection stays on the dir. */
 	app_left(&a);
 	CHECK_STR_EQ(sel_name(&a), "b");
 	CHECK(a.visible.len == 3); /* a, b, e */
 
-	/* Right on a collapsed dir expands it (stays on dir). */
+	/* Right enters a collapsed dir: expand AND descend in one press. */
 	app_right(&a);
-	CHECK_STR_EQ(sel_name(&a), "b");
+	CHECK_STR_EQ(sel_name(&a), "c");
 	CHECK(a.visible.len == 5);
 
-	/* Left on a collapsed top-level dir: collapse, then no parent at root.
-	 */
-	app_left(&a); /* collapse b */
-	CHECK(a.visible.len == 3);
-	app_left(&a); /* depth 0, no parent */
-	CHECK_STR_EQ(sel_name(&a), "b");
+	app_free(&a);
+}
+
+void test_nav_filter_timeout(void)
+{
+	app a;
+	build(&a);
+
+	/* Typing within the window appends; an idle gap resets the buffer. */
+	app_filter_age(&a, 1000ull * 1000000ull); /* t = 1000ms */
+	app_filter_push(&a, 'a');
+	app_filter_age(&a, 1100ull * 1000000ull); /* +100ms: still fresh */
+	app_filter_push(&a, 'b');
+	CHECK_STR_EQ(a.filter, "ab");
+	CHECK(!app_filter_expired(&a, 1300ull * 1000000ull)); /* +200ms */
+	CHECK(app_filter_expired(&a, 2000ull * 1000000ull));  /* +900ms idle */
+
+	/* Next keystroke after the gap starts fresh. */
+	app_filter_age(&a, 2000ull * 1000000ull);
+	app_filter_push(&a, 'z');
+	CHECK_STR_EQ(a.filter, "z");
 
 	app_free(&a);
 }

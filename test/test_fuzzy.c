@@ -86,24 +86,11 @@ void test_fuzzy_auto_expand(void)
 
 	CHECK(name_visible(&a, "buried.c"));
 	CHECK_STR_EQ(a.t.nodes[app_selected_node(&a)].name, "buried.c");
-	CHECK(a.filter_nomatch == false);
 
-	app_free(&a);
-}
-
-void test_fuzzy_no_match_flag(void)
-{
-	app a;
-	app_init(&a);
-	tree_add(&a.t, "alpha", 0);
-	app_reflatten(&a);
-
-	app_filter_push(&a, 'z'); /* no 'z' anywhere */
-	app_apply_match(&a, fuzzy_best_match(&a.t, a.filter));
-	CHECK(a.filter_nomatch == true);
-
-	app_filter_clear(&a);
-	CHECK(a.filter_nomatch == false);
+	/* No match leaves the selection put (no jump). */
+	uint32_t before = app_selected_node(&a);
+	app_apply_match(&a, fuzzy_best_match(&a.t, "zzzzz"));
+	CHECK(app_selected_node(&a) == before);
 
 	app_free(&a);
 }

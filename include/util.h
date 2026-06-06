@@ -2,6 +2,7 @@
 #define FUSSY_UTIL_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 /*
  * Allocation wrappers that abort on out-of-memory. fussy is a short-lived
@@ -11,5 +12,8 @@
 void *xmalloc(size_t n);
 void *xrealloc(void *p, size_t n);
 char *xstrdup(const char *s);
+
+/* Monotonic clock in nanoseconds (CLOCK_MONOTONIC), for the filter timeout. */
+uint64_t mono_ns(void);
 
 #endif /* FUSSY_UTIL_H */

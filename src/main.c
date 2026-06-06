@@ -7,6 +7,7 @@
 #include "render.h"
 #include "term.h"
 #include "tree.h"
+#include "util.h"
 
 #include <errno.h>
 #include <poll.h>
@@ -88,6 +89,7 @@ static void apply_action(app *a, action act, bool *running, fuzzy_engine *eng)
 		app_end(a);
 		break;
 	case ACT_FILTER_PUSH:
+		app_filter_age(a, mono_ns()); /* reset if idle, then append */
 		app_filter_push(a, act.cp);
 		if (eng)
 			fuzzy_submit(eng, &a->t, a->filter);
@@ -95,13 +97,15 @@ static void apply_action(app *a, action act, bool *running, fuzzy_engine *eng)
 			app_apply_match(a, fuzzy_best_match(&a->t, a->filter));
 		break;
 	case ACT_FILTER_BACKSPACE:
+		app_filter_age(a, mono_ns());
 		app_filter_backspace(a);
-		if (a->filter_len == 0)
-			a->filter_nomatch = false;
-		else if (eng)
-			fuzzy_submit(eng, &a->t, a->filter);
-		else
-			app_apply_match(a, fuzzy_best_match(&a->t, a->filter));
+		if (a->filter_len > 0) {
+			if (eng)
+				fuzzy_submit(eng, &a->t, a->filter);
+			else
+				app_apply_match(
+				    a, fuzzy_best_match(&a->t, a->filter));
+		}
 		break;
 	case ACT_FILTER_CLEAR:
 		app_filter_clear(a);
@@ -161,13 +165,31 @@ static int run_interactive(bool all)
 	while (running) {
 		screen_draw(&s, &a, repo, branch, color);
 
+		/* Block until input or a fuzzy result; while a filter is
+		 * active, wake when it goes idle so we can clear and revert the
+		 * footer. */
+		int timeout = -1;
+		if (a.filter_len > 0) {
+			uint64_t gap = (uint64_t)FILTER_TIMEOUT_MS * 1000000u;
+			uint64_t elapsed = mono_ns() - a.last_input_ns;
+			timeout = elapsed >= gap
+			              ? 0
+			              : (int)((gap - elapsed) / 1000000u) + 1;
+		}
+
 		fds[0].revents = fds[1].revents = 0;
-		if (poll(fds, nfds, -1) < 0) {
+		int pr = poll(fds, nfds, timeout);
+		if (pr < 0) {
 			if (errno == EINTR) {
 				term_take_resize(); /* redraw next iteration */
 				continue;
 			}
 			break;
+		}
+		if (pr == 0) { /* idle timeout: drop the stale filter */
+			if (app_filter_expired(&a, mono_ns()))
+				app_filter_clear(&a);
+			continue;
 		}
 
 		/* Apply a ready fuzzy result (expand to + select the match). */

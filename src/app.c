@@ -10,7 +10,7 @@ void app_init(app *a)
 	a->hide_dotfiles = false;
 	a->filter_len = 0;
 	a->filter[0] = '\0';
-	a->filter_nomatch = false;
+	a->last_input_ns = 0;
 	flatten(&a->visible, &a->t, a->hide_dotfiles);
 }
 
@@ -46,14 +46,41 @@ void app_reflatten(app *a)
 
 void app_down(app *a)
 {
-	if (a->selected + 1 < a->visible.len)
-		a->selected++;
+	/* Next sibling: scan forward, skipping our descendants (deeper rows),
+	 * to the next row at the same depth. Stop if we leave this level. */
+	if (a->selected >= a->visible.len)
+		return;
+	uint16_t d = a->visible.rows[a->selected].depth;
+	for (uint32_t j = a->selected + 1; j < a->visible.len; j++) {
+		uint16_t dj = a->visible.rows[j].depth;
+		if (dj < d)
+			return; /* left this subtree; we were the last sibling
+			         */
+		if (dj == d) {
+			a->selected = j;
+			return;
+		}
+	}
 }
 
 void app_up(app *a)
 {
-	if (a->selected > 0)
-		a->selected--;
+	/* Previous sibling: scan backward, skipping the previous sibling's
+	 * descendants, to the nearest earlier row at the same depth. */
+	if (a->selected == 0)
+		return;
+	uint16_t d = a->visible.rows[a->selected].depth;
+	for (uint32_t j = a->selected; j > 0;) {
+		j--;
+		uint16_t dj = a->visible.rows[j].depth;
+		if (dj < d)
+			return; /* reached the parent; we were the first sibling
+			         */
+		if (dj == d) {
+			a->selected = j;
+			return;
+		}
+	}
 }
 
 void app_home(app *a)
@@ -78,17 +105,16 @@ void app_toggle(app *a)
 
 void app_right(app *a)
 {
+	/* Enter a directory: expand it if collapsed, then step onto its first
+	 * visible child. No-op on a file. */
 	if (a->selected >= a->visible.len)
 		return;
 	flat_row r = a->visible.rows[a->selected];
 	node *n = &a->t.nodes[r.node];
 	if (node_is_file(n))
 		return;
-	if (!node_is_expanded(n)) {
-		app_toggle(a); /* collapsed -> expand, stay put */
-		return;
-	}
-	/* expanded -> step onto the first child if one is visible */
+	if (!node_is_expanded(n))
+		app_toggle(a); /* expand in place (splices children after us) */
 	if (a->selected + 1 < a->visible.len &&
 	    a->visible.rows[a->selected + 1].depth == r.depth + 1)
 		a->selected++;
@@ -173,7 +199,24 @@ void app_filter_clear(app *a)
 {
 	a->filter_len = 0;
 	a->filter[0] = '\0';
-	a->filter_nomatch = false;
+}
+
+/* Record a keystroke at `now_ns`, first clearing the buffer if it has gone idle
+ * past the timeout (so typing after a pause starts a fresh query). */
+void app_filter_age(app *a, uint64_t now_ns)
+{
+	uint64_t gap = (uint64_t)FILTER_TIMEOUT_MS * 1000000u;
+	if (a->filter_len > 0 && now_ns - a->last_input_ns >= gap)
+		app_filter_clear(a);
+	a->last_input_ns = now_ns;
+}
+
+/* True if the buffer is non-empty and has gone idle past the timeout. The main
+ * loop uses this to auto-clear (and redraw) without a keystroke. */
+bool app_filter_expired(const app *a, uint64_t now_ns)
+{
+	uint64_t gap = (uint64_t)FILTER_TIMEOUT_MS * 1000000u;
+	return a->filter_len > 0 && now_ns - a->last_input_ns >= gap;
 }
 
 void app_expand_to(app *a, uint32_t node)
@@ -189,11 +232,8 @@ void app_expand_to(app *a, uint32_t node)
 
 void app_apply_match(app *a, uint32_t node)
 {
-	if (node == NODE_NIL) {
-		a->filter_nomatch = a->filter_len > 0;
-		return;
-	}
-	a->filter_nomatch = false;
+	if (node == NODE_NIL)
+		return; /* no match: leave the selection where it is */
 	app_expand_to(a, node);
 	app_reflatten(a);
 	for (uint32_t i = 0; i < a->visible.len; i++) {

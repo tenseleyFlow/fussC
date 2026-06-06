@@ -10,6 +10,10 @@
 
 #define FILTER_MAX 128
 
+/* Idle gap after which the next typed character starts a fresh filter, so you
+ * can type a new name without clearing manually. */
+#define FILTER_TIMEOUT_MS 600
+
 /*
  * Interactive view state. The tree and visible list live here; the renderer
  * derives the on-screen window from `selected` each frame (no persistent
@@ -23,7 +27,8 @@ typedef struct {
 	bool hide_dotfiles;
 	char filter[FILTER_MAX];
 	size_t filter_len;
-	bool filter_nomatch; /* last jump found nothing (header shows it) */
+	uint64_t
+	    last_input_ns; /* monotonic time of the last filter keystroke */
 } app;
 
 void app_init(app *a);
@@ -37,11 +42,13 @@ void app_reflatten(app *a);
 /* The arena index of the selected node, or NODE_NIL when the list is empty. */
 uint32_t app_selected_node(const app *a);
 
-/* Navigation (see architecture.md "Navigation semantics"). */
-void app_down(app *a);
-void app_up(app *a);
+/* Navigation (see architecture.md "Navigation semantics").
+ * Up/Down move only among siblings at the same depth (clamped, no wrap); going
+ * deeper is Right (enter), shallower is Left. */
+void app_down(app *a);  /* next sibling */
+void app_up(app *a);    /* previous sibling */
 void app_left(app *a);  /* expanded dir: collapse; else go to parent */
-void app_right(app *a); /* collapsed dir: expand; expanded dir: enter child */
+void app_right(app *a); /* dir: expand-if-needed and enter first child */
 void app_toggle(app *a);
 void app_home(app *a);
 void app_end(app *a);
@@ -54,13 +61,21 @@ void app_filter_push(app *a, uint32_t cp);
 void app_filter_backspace(app *a);
 void app_filter_clear(app *a);
 
+/* Register a keystroke at monotonic time `now_ns`, resetting the buffer first
+ * if it has been idle past FILTER_TIMEOUT_MS. */
+void app_filter_age(app *a, uint64_t now_ns);
+
+/* True if a non-empty buffer has gone idle past the timeout (auto-clear hook).
+ */
+bool app_filter_expired(const app *a, uint64_t now_ns);
+
 /* Mark every ancestor of `node` expanded so the node becomes visible. */
 void app_expand_to(app *a, uint32_t node);
 
-/* Apply a fuzzy result: NODE_NIL sets the no-match flag (when a query is
- * present) and leaves the selection; otherwise expand the path to `node`,
- * re-flatten, and select it. The match itself is computed elsewhere (the
- * scorer single-threaded, or the worker thread) so app stays decoupled. */
+/* Apply a fuzzy result: NODE_NIL leaves the selection put (no match); otherwise
+ * expand the path to `node`, re-flatten, and select it. The match itself is
+ * computed elsewhere (the scorer single-threaded, or the worker thread) so app
+ * stays decoupled. */
 void app_apply_match(app *a, uint32_t node);
 
 #endif /* FUSSY_APP_H */

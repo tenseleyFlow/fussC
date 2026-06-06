@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static void die_oom(void)
 {
@@ -32,4 +33,11 @@ char *xstrdup(const char *s)
 	char *p = xmalloc(n);
 	memcpy(p, s, n);
 	return p;
+}
+
+uint64_t mono_ns(void)
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
 }

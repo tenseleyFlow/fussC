@@ -168,26 +168,21 @@ static char *build_header(const char *repo, const char *branch, const app *a,
 	sb_put(&s, branch ? branch : "");
 	if (color)
 		sb_put(&s, "\033[0m");
-	if (a->filter_len > 0) {
-		sb_put(&s, "  ");
-		if (color)
-			sb_put(&s, a->filter_nomatch ? "\033[31m" : "\033[1m");
-		sb_put(&s, "/");
-		sb_put(&s, a->filter);
-		if (color)
-			sb_put(&s, "\033[0m");
-	}
+	(void)a; /* the live query lives in the footer, not the header */
 	return s.buf ? s.buf : xstrdup("");
 }
 
-static char *build_footer(bool color)
+/* The footer hint, with the grey "type:" slot showing the live filter text in
+ * place of the word "filter" once you start typing. */
+static char *build_footer(const app *a, bool color)
 {
 	strbuf s = {0};
 	if (color)
 		sb_put(&s, "\033[90m");
-	sb_put(&s,
-	       "type:filter  \342\206\221\342\206\223 move  "
-	       "\342\206\222 open  \342\206\220 back  Space toggle  Q quit");
+	sb_put(&s, "type:");
+	sb_put(&s, a->filter_len > 0 ? a->filter : "filter");
+	sb_put(&s, "  \342\206\221\342\206\223 sibling  \342\206\222 in  "
+	           "\342\206\220 out  Space peek  H hidden  Q quit");
 	if (color)
 		sb_put(&s, "\033[0m");
 	return s.buf ? s.buf : xstrdup("");
@@ -323,7 +318,7 @@ char **render_frame(const app *a, const char *repo, const char *branch,
 	}
 
 	if (rows >= 2) {
-		char *ft = build_footer(color);
+		char *ft = build_footer(a, color);
 		lines[rows - 1] = clip_to_width(ft, cols);
 		free(ft);
 	}

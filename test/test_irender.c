@@ -43,18 +43,26 @@ void test_render_frame_selection(void)
 	app_free(&a);
 }
 
-void test_render_frame_filter_in_header(void)
+void test_render_frame_filter_in_footer(void)
 {
 	app a;
 	app_init(&a);
 	tree_add(&a.t, "file", ST_UNSTAGED);
 	app_reflatten(&a);
+
+	/* Empty filter: the footer shows the "type:filter" hint. */
+	char **f = render_frame(&a, "r", "b", false, 6, 40);
+	CHECK(strstr(f[0], "/") == NULL); /* header has no query */
+	CHECK(strstr(f[5], "type:filter") != NULL);
+	free_frame(f, 6);
+
+	/* Typed: the live text replaces "filter" in the footer slot. */
 	app_filter_push(&a, 'f');
 	app_filter_push(&a, 'i');
-
-	char **f = render_frame(&a, "r", "b", false, 5, 40);
-	CHECK(strstr(f[0], "/fi") != NULL);
-	free_frame(f, 5);
+	f = render_frame(&a, "r", "b", false, 6, 40);
+	CHECK(strstr(f[5], "type:fi") != NULL);
+	CHECK(strstr(f[5], "type:filter") == NULL);
+	free_frame(f, 6);
 
 	app_free(&a);
 }
