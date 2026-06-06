@@ -26,9 +26,23 @@ fussy --print    # non-interactive tree output
 fussy --help
 ```
 
-Interactive controls: type a filename to fuzzy-jump (the selection moves as you type); arrows or
-`Ctrl-N`/`Ctrl-P` move among siblings, `Right`/`Ctrl-F` enters a directory, `Left`/`Ctrl-B` goes back
-up, `Space` expands or collapses in place. UPPERCASE letters are git commands; `Q` quits.
+### Controls
+
+Type a filename to fuzzy-jump (the selection moves as you type; an idle pause resets the query).
+
+Navigation: arrows or `Ctrl-N`/`Ctrl-P` move among siblings, `Right`/`Ctrl-F` enters a directory,
+`Left`/`Ctrl-B` goes back up, `Space` expands or collapses in place, `H` toggles hidden files, `Q`
+quits.
+
+Git commands are UPPERCASE (lowercase is the filter):
+
+```
+A stage        S stage-all      C commit    M amend
+U unstage      Z unstage-all    X discard   D delete
+R rename       T tag
+```
+
+`C`/`M` open a commit-message box (Enter commits, Esc cancels); `X`/`D` ask to confirm (y/n).
 
 ## Portability
 
