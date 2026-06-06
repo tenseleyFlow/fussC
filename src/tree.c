@@ -46,6 +46,7 @@ static void node_init(tree *t, uint32_t idx, uint32_t parent, const char *name,
 	n->name = xstrdup(name);
 	n->name_lower = ascii_lower_dup(name);
 	n->path = xstrdup(path);
+	n->path_lower = ascii_lower_dup(path);
 	n->status = status;
 	n->flags = flags;
 	n->first_child = NODE_NIL;
@@ -68,6 +69,7 @@ void tree_free(tree *t)
 		free(t->nodes[i].name);
 		free(t->nodes[i].name_lower);
 		free(t->nodes[i].path);
+		free(t->nodes[i].path_lower);
 	}
 	free(t->nodes);
 	t->nodes = NULL;

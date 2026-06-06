@@ -25,6 +25,7 @@ typedef struct {
 	char *name;       /* basename, owned ("." for the root)        */
 	char *name_lower; /* ASCII-lowercased name, owned (for fuzzy)   */
 	char *path;       /* repo-relative path, owned ("" for root)   */
+	char *path_lower; /* ASCII-lowercased path, owned (for fuzzy)   */
 	file_status status;
 	uint8_t flags;
 	uint32_t first_child;

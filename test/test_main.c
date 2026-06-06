@@ -40,6 +40,10 @@ void test_frame_diff_full_paint(void);
 void test_input_navigation(void);
 void test_input_case_is_mode(void);
 void test_input_editing_and_quit(void);
+void test_fuzzy_tiers(void);
+void test_fuzzy_ordering(void);
+void test_fuzzy_best_match(void);
+void test_fuzzy_fuzz(void);
 
 int main(void)
 {
@@ -79,6 +83,10 @@ int main(void)
 	RUN(test_input_navigation);
 	RUN(test_input_case_is_mode);
 	RUN(test_input_editing_and_quit);
+	RUN(test_fuzzy_tiers);
+	RUN(test_fuzzy_ordering);
+	RUN(test_fuzzy_best_match);
+	RUN(test_fuzzy_fuzz);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);
