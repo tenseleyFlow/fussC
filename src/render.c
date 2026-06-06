@@ -260,6 +260,184 @@ static bool *compute_is_last(const flat_list *f, uint16_t *out_maxd)
 	return is_last;
 }
 
+/* ---- modal overlay ------------------------------------------------------- */
+
+#define BOX_TL       "\342\224\214" /* corners + edges */
+#define BOX_TR       "\342\224\220"
+#define BOX_BL       "\342\224\224"
+#define BOX_BR       "\342\224\230"
+#define BOX_H        "\342\224\200"
+#define BOX_V        "\342\224\202"
+#define CURSOR       "\342\226\210" /* block cursor */
+#define OV_MAX_LINES 6
+
+static void sb_putn(strbuf *s, const char *str, size_t n)
+{
+	for (size_t i = 0; i < n; i++)
+		sb_putc(s, str[i]);
+}
+
+/* Wrap a UTF-8 string into lines of at most `width` display columns (never
+ * splitting a codepoint). Always yields at least one line. */
+static char **wrap_text(const char *s, int width, int *count)
+{
+	char **lines = NULL;
+	int n = 0, cap = 0;
+	strbuf cur = {0};
+	int curw = 0;
+
+	for (const char *p = s; *p != '\0';) {
+		uint32_t cp;
+		int len = utf8_decode(p, &cp);
+		int w = cp_width(cp);
+		if (curw > 0 && curw + w > width) {
+			if (n == cap) {
+				cap = cap ? cap * 2 : 4;
+				lines = xrealloc(lines,
+				                 (size_t)cap * sizeof(*lines));
+			}
+			lines[n++] = cur.buf ? cur.buf : xstrdup("");
+			cur = (strbuf){0};
+			curw = 0;
+		}
+		sb_putn(&cur, p, (size_t)len);
+		curw += w;
+		p += len;
+	}
+	if (n == cap) {
+		cap = cap ? cap * 2 : 4;
+		lines = xrealloc(lines, (size_t)cap * sizeof(*lines));
+	}
+	lines[n++] = cur.buf ? cur.buf : xstrdup("");
+	*count = n;
+	return lines;
+}
+
+/* Place `seg` at (row, col), indented with spaces, clipped to cols. */
+static void box_line(char **lines, int rows, int cols, int row, int col,
+                     const char *seg)
+{
+	if (row < 0 || row >= rows)
+		return;
+	strbuf s = {0};
+	for (int i = 0; i < col; i++)
+		sb_putc(&s, ' ');
+	sb_put(&s, seg);
+	free(lines[row]);
+	lines[row] = clip_to_width(s.buf ? s.buf : "", cols);
+	free(s.buf);
+}
+
+static void draw_overlay(char **lines, int rows, int cols, const overlay *o,
+                         bool color)
+{
+	int inner = cols - 8;
+	if (inner < 16)
+		inner = 16;
+	if (inner > 56)
+		inner = 56;
+
+	/* Content lines: a fixed hint for confirm, else the wrapped input with
+	 * a block cursor spliced in at the edit position. */
+	int ncontent = 0;
+	char **content;
+	if (o->kind == OV_CONFIRM) {
+		content = xmalloc(sizeof(*content));
+		content[0] = xstrdup("y: yes    n: no");
+		ncontent = 1;
+	} else {
+		strbuf disp = {0};
+		sb_putn(&disp, o->text, o->cursor);
+		sb_put(&disp, CURSOR);
+		sb_put(&disp, o->text + o->cursor);
+		content =
+		    wrap_text(disp.buf ? disp.buf : CURSOR, inner, &ncontent);
+		free(disp.buf);
+		if (ncontent > OV_MAX_LINES) { /* keep the tail (cursor area) */
+			int drop = ncontent - OV_MAX_LINES;
+			for (int i = 0; i < drop; i++)
+				free(content[i]);
+			memmove(content, content + drop,
+			        (size_t)OV_MAX_LINES * sizeof(*content));
+			ncontent = OV_MAX_LINES;
+		}
+	}
+
+	const char *hint = o->kind == OV_CONFIRM  ? ""
+	                   : o->kind == OV_COMMIT ? "Enter commit  Esc cancel"
+	                   : o->kind == OV_RENAME
+	                       ? "Enter rename  Esc cancel"
+	                       : "Enter create tag  Esc cancel";
+	bool has_hint = hint[0] != '\0';
+
+	int box_w = inner + 4; /* BOX_V + space + inner + space + BOX_V */
+	int box_h = 1 + ncontent + 1;
+	int total_h = box_h + (has_hint ? 1 : 0);
+	int start_row = (rows - total_h) / 2;
+	if (start_row < 0)
+		start_row = 0;
+	int start_col = (cols - box_w) / 2;
+	if (start_col < 0)
+		start_col = 0;
+
+	/* Top border with embedded title. */
+	strbuf top = {0};
+	if (color)
+		sb_put(&top, "\033[1m");
+	sb_put(&top, BOX_TL BOX_H " ");
+	sb_put(&top, o->title);
+	sb_put(&top, " ");
+	int fill = (box_w - 2) - (3 + (int)display_width(o->title));
+	for (int i = 0; i < fill; i++)
+		sb_put(&top, BOX_H);
+	sb_put(&top, BOX_TR);
+	if (color)
+		sb_put(&top, "\033[0m");
+	box_line(lines, rows, cols, start_row, start_col,
+	         top.buf ? top.buf : "");
+	free(top.buf);
+
+	/* Content rows. */
+	for (int i = 0; i < ncontent; i++) {
+		strbuf s = {0};
+		sb_put(&s, BOX_V " ");
+		sb_put(&s, content[i]);
+		int w = (int)display_width(content[i]);
+		for (int k = w; k < inner; k++)
+			sb_putc(&s, ' ');
+		sb_put(&s, " " BOX_V);
+		box_line(lines, rows, cols, start_row + 1 + i, start_col,
+		         s.buf ? s.buf : "");
+		free(s.buf);
+	}
+
+	/* Bottom border. */
+	strbuf bot = {0};
+	sb_put(&bot, BOX_BL);
+	for (int i = 0; i < box_w - 2; i++)
+		sb_put(&bot, BOX_H);
+	sb_put(&bot, BOX_BR);
+	box_line(lines, rows, cols, start_row + box_h - 1, start_col,
+	         bot.buf ? bot.buf : "");
+	free(bot.buf);
+
+	if (has_hint) {
+		strbuf s = {0};
+		if (color)
+			sb_put(&s, "\033[90m");
+		sb_put(&s, hint);
+		if (color)
+			sb_put(&s, "\033[0m");
+		box_line(lines, rows, cols, start_row + box_h, start_col,
+		         s.buf ? s.buf : "");
+		free(s.buf);
+	}
+
+	for (int i = 0; i < ncontent; i++)
+		free(content[i]);
+	free(content);
+}
+
 char **render_frame(const app *a, const char *repo, const char *branch,
                     bool color, int rows, int cols)
 {
@@ -322,6 +500,9 @@ char **render_frame(const app *a, const char *repo, const char *branch,
 		lines[rows - 1] = clip_to_width(ft, cols);
 		free(ft);
 	}
+
+	if (overlay_active(&a->ov))
+		draw_overlay(lines, rows, cols, &a->ov, color);
 
 	free(is_last);
 	free(lad);

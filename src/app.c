@@ -13,6 +13,7 @@ void app_init(app *a)
 	a->filter_len = 0;
 	a->filter[0] = '\0';
 	a->last_input_ns = 0;
+	overlay_close(&a->ov);
 	flatten(&a->visible, &a->t, a->hide_dotfiles);
 }
 

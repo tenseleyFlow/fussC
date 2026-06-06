@@ -67,6 +67,72 @@ void test_render_frame_filter_in_footer(void)
 	app_free(&a);
 }
 
+void test_render_overlay_commit(void)
+{
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "file.c", 0);
+	app_reflatten(&a);
+	overlay_open_commit(&a.ov, false, "fix: thing");
+
+	char **f = render_frame(&a, "r", "b", false, 12, 60);
+	bool title = false, text = false;
+	for (int i = 0; i < 12; i++) {
+		if (strstr(f[i], "Commit message"))
+			title = true;
+		if (strstr(f[i], "fix: thing"))
+			text = true;
+	}
+	CHECK(title);
+	CHECK(text);
+	free_frame(f, 12);
+	app_free(&a);
+}
+
+void test_render_overlay_confirm(void)
+{
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "x", 0);
+	app_reflatten(&a);
+	overlay_open_confirm(&a.ov, "Delete x?");
+
+	char **f = render_frame(&a, "r", "b", false, 12, 60);
+	bool prompt = false, yn = false;
+	for (int i = 0; i < 12; i++) {
+		if (strstr(f[i], "Delete x?"))
+			prompt = true;
+		if (strstr(f[i], "y: yes"))
+			yn = true;
+	}
+	CHECK(prompt);
+	CHECK(yn);
+	free_frame(f, 12);
+	app_free(&a);
+}
+
+/* A long message wraps to multiple content rows: the box grows. */
+void test_render_overlay_grows(void)
+{
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "x", 0);
+	app_reflatten(&a);
+	char msg[160];
+	memset(msg, 'a', 150);
+	msg[150] = '\0';
+	overlay_open_commit(&a.ov, false, msg);
+
+	char **f = render_frame(&a, "r", "b", false, 20, 60);
+	int content_rows = 0;
+	for (int i = 0; i < 20; i++)
+		if (strstr(f[i], "aaaa"))
+			content_rows++;
+	CHECK(content_rows >= 2); /* wrapped -> box taller than one line */
+	free_frame(f, 20);
+	app_free(&a);
+}
+
 void test_frame_diff_minimal(void)
 {
 	char *oldf[3] = {strdup("aaa"), strdup("bbb"), strdup("ccc")};

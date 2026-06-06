@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "flatten.h"
+#include "overlay.h"
 #include "tree.h"
 
 #define FILTER_MAX 128
@@ -29,6 +30,7 @@ typedef struct {
 	size_t filter_len;
 	uint64_t
 	    last_input_ns; /* monotonic time of the last filter keystroke */
+	overlay ov;        /* active modal overlay, or OV_NONE */
 } app;
 
 void app_init(app *a);
