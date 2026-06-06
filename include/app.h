@@ -31,7 +31,7 @@ typedef struct {
 	uint64_t
 	    last_input_ns; /* monotonic time of the last filter keystroke */
 	overlay ov;        /* active modal overlay, or OV_NONE */
-	char status[160];  /* transient result message (git op feedback) */
+	char status[256];  /* transient result message (git op feedback) */
 } app;
 
 void app_init(app *a);
