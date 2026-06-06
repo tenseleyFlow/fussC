@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgit2-dev pkg-config
       - name: Toolchain
         run: cc --version && make --version | head -1
       - name: Build
@@ -32,6 +34,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgit2-dev pkg-config
       - name: Build + test with sanitizers
         run: make OPT="-O0 -g" DBG="-fsanitize=address,undefined" test
         env:
@@ -43,6 +47,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Dependencies
+        run: brew install libgit2 pkg-config
       - name: Toolchain
         run: cc --version && make --version | head -1
       - name: Build
@@ -60,6 +66,8 @@ jobs:
         with:
           release: "15.0"
           usesh: true
+          prepare: |
+            pkg install -y libgit2 pkgconf
           run: |
             cc --version
             make
