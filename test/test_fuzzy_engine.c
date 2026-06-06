@@ -79,3 +79,43 @@ void test_engine_convergence(void)
 	fuzzy_engine_stop(&e);
 	tree_free(&t);
 }
+
+static void fill(tree *t, int n)
+{
+	char path[64];
+	for (int i = 0; i < n; i++) {
+		snprintf(path, sizeof(path), "dir%d/file%d.c", i % 20, i);
+		tree_add(t, path, 0);
+	}
+}
+
+/* pause() must make it safe to free and rebuild the arena while the worker is
+ * alive: no use-after-free, no race, no stale result applied. ASan/TSan guard.
+ */
+void test_engine_pause_resume(void)
+{
+	tree t;
+	tree_init(&t);
+	fill(&t, 600);
+
+	fuzzy_engine e;
+	CHECK(fuzzy_engine_start(&e));
+	fuzzy_submit(&e, &t, "file");
+
+	for (int r = 0; r < 60; r++) {
+		fuzzy_submit(&e, &t, "fi"); /* keep the worker busy */
+		fuzzy_engine_pause(&e);     /* quiesce before touching t */
+		tree_free(&t);              /* safe only because of pause */
+		tree_init(&t);
+		fill(&t, 600);
+		fuzzy_engine_resume(&e);
+		fuzzy_submit(&e, &t, "file");
+	}
+
+	uint32_t node = NODE_NIL;
+	CHECK(submit_and_wait(&e, &t, "file123", &node));
+	CHECK(node != NODE_NIL);
+
+	fuzzy_engine_stop(&e);
+	tree_free(&t);
+}

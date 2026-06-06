@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include "util.h"
+
 void app_init(app *a)
 {
 	tree_init(&a->t);
@@ -228,6 +230,57 @@ void app_expand_to(app *a, uint32_t node)
 		a->t.nodes[p].flags |= NF_EXPANDED;
 		p = a->t.nodes[p].parent;
 	}
+}
+
+char **app_collapsed_paths(const app *a, uint32_t *count)
+{
+	char **out = NULL;
+	uint32_t n = 0, cap = 0;
+	for (uint32_t i = 1; i < a->t.len; i++) {
+		const node *nd = &a->t.nodes[i];
+		if (!node_is_file(nd) && !node_is_expanded(nd)) {
+			if (n == cap) {
+				cap = cap ? cap * 2 : 8;
+				out = xrealloc(out, cap * sizeof(*out));
+			}
+			out[n++] = xstrdup(nd->path);
+		}
+	}
+	*count = n;
+	return out;
+}
+
+void app_collapse_paths(app *a, char *const *paths, uint32_t count)
+{
+	for (uint32_t i = 0; i < count; i++) {
+		uint32_t idx = tree_find(&a->t, paths[i]);
+		if (idx != NODE_NIL && !node_is_file(&a->t.nodes[idx]))
+			a->t.nodes[idx].flags &= (uint8_t)~NF_EXPANDED;
+	}
+}
+
+char *app_selected_path_dup(const app *a)
+{
+	uint32_t n = app_selected_node(a);
+	return n == NODE_NIL ? NULL : xstrdup(a->t.nodes[n].path);
+}
+
+void app_select_path(app *a, const char *path)
+{
+	a->selected = 0;
+	if (path != NULL) {
+		uint32_t target = tree_find(&a->t, path);
+		if (target != NODE_NIL) {
+			for (uint32_t i = 0; i < a->visible.len; i++) {
+				if (a->visible.rows[i].node == target) {
+					a->selected = i;
+					break;
+				}
+			}
+		}
+	}
+	if (a->visible.len > 0 && a->selected >= a->visible.len)
+		a->selected = a->visible.len - 1;
 }
 
 void app_apply_match(app *a, uint32_t node)

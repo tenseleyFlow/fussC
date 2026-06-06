@@ -2,6 +2,7 @@
 #include "test.h"
 #include "tree.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static const char *sel_name(const app *a)
@@ -80,6 +81,56 @@ void test_nav_enter_and_back(void)
 	CHECK_STR_EQ(sel_name(&a), "c");
 	CHECK(a.visible.len == 5);
 
+	app_free(&a);
+}
+
+/* Snapshotting collapsed dirs + selection, rebuilding the tree, then reapplying
+ * them keeps the user's view (this is what the post-mutation refresh does). */
+void test_refresh_preserves_view(void)
+{
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "src/main.c", 0);
+	tree_add(&a.t, "src/util.c", 0);
+	tree_add(&a.t, "top.txt", 0);
+	app_reflatten(&a);
+
+	/* Collapse src, select top.txt. */
+	uint32_t src = tree_find(&a.t, "src");
+	a.t.nodes[src].flags &= (uint8_t)~NF_EXPANDED;
+	app_reflatten(&a);
+	app_select_path(&a, "top.txt");
+	CHECK_STR_EQ(sel_name(&a), "top.txt");
+
+	/* Snapshot. */
+	uint32_t ncol = 0;
+	char **col = app_collapsed_paths(&a, &ncol);
+	CHECK(ncol == 1);
+	CHECK_STR_EQ(col[0], "src");
+	char *sel = app_selected_path_dup(&a);
+	CHECK_STR_EQ(sel, "top.txt");
+
+	/* Rebuild the arena from scratch (same files), then reapply. */
+	tree_free(&a.t);
+	tree_init(&a.t);
+	tree_add(&a.t, "src/main.c", 0);
+	tree_add(&a.t, "src/util.c", 0);
+	tree_add(&a.t, "top.txt", 0);
+	app_collapse_paths(&a, col, ncol);
+	flatten(&a.visible, &a.t, a.hide_dotfiles);
+	app_select_path(&a, sel);
+
+	/* src stayed collapsed (children hidden) and top.txt stayed selected.
+	 */
+	uint32_t src2 = tree_find(&a.t, "src");
+	CHECK(!node_is_expanded(&a.t.nodes[src2]));
+	CHECK(a.visible.len == 2); /* src, top.txt */
+	CHECK_STR_EQ(sel_name(&a), "top.txt");
+
+	for (uint32_t i = 0; i < ncol; i++)
+		free(col[i]);
+	free(col);
+	free(sel);
 	app_free(&a);
 }
 

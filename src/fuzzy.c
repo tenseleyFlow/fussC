@@ -113,7 +113,7 @@ static void *worker_main(void *arg)
 
 	pthread_mutex_lock(&e->mu);
 	for (;;) {
-		while (!e->quit && e->generation == e->processed)
+		while (!e->quit && (e->paused || e->generation == e->processed))
 			pthread_cond_wait(&e->cv, &e->mu);
 		if (e->quit)
 			break;
@@ -123,6 +123,7 @@ static void *worker_main(void *arg)
 		char q[sizeof(e->query)];
 		memcpy(q, e->query, sizeof(q));
 		const tree *arena = e->arena;
+		e->busy = true;
 		pthread_mutex_unlock(&e->mu);
 
 		/* Score off-lock: the arena is immutable for this generation.
@@ -130,7 +131,11 @@ static void *worker_main(void *arg)
 		uint32_t best = arena ? fuzzy_best_match(arena, q) : NODE_NIL;
 
 		pthread_mutex_lock(&e->mu);
-		if (!e->quit && g == e->generation) {
+		e->busy = false;
+		pthread_cond_signal(&e->idle_cv); /* a pauser may be waiting */
+		/* Skip posting if a refresh paused us (arena being freed) or a
+		 * newer query arrived (rescore it on the next loop). */
+		if (!e->quit && !e->paused && g == e->generation) {
 			e->result_gen = g;
 			e->result_node = best;
 			e->result_ready = true;
@@ -139,7 +144,6 @@ static void *worker_main(void *arg)
 				(void)0; /* pipe full is fine: a wake is a wake
 				          */
 		}
-		/* Otherwise a newer query arrived; loop and rescore it. */
 	}
 	pthread_mutex_unlock(&e->mu);
 	return NULL;
@@ -152,6 +156,8 @@ bool fuzzy_engine_start(fuzzy_engine *e)
 	e->generation = 0;
 	e->processed = 0;
 	e->quit = false;
+	e->paused = false;
+	e->busy = false;
 	e->result_gen = 0;
 	e->result_node = NODE_NIL;
 	e->result_ready = false;
@@ -170,12 +176,16 @@ bool fuzzy_engine_start(fuzzy_engine *e)
 		goto fail_pipe;
 	if (pthread_cond_init(&e->cv, NULL) != 0)
 		goto fail_mu;
-	if (pthread_create(&e->thread, NULL, worker_main, e) != 0)
+	if (pthread_cond_init(&e->idle_cv, NULL) != 0)
 		goto fail_cv;
+	if (pthread_create(&e->thread, NULL, worker_main, e) != 0)
+		goto fail_idle;
 
 	e->started = true;
 	return true;
 
+fail_idle:
+	pthread_cond_destroy(&e->idle_cv);
 fail_cv:
 	pthread_cond_destroy(&e->cv);
 fail_mu:
@@ -196,6 +206,7 @@ void fuzzy_engine_stop(fuzzy_engine *e)
 	pthread_mutex_unlock(&e->mu);
 
 	pthread_join(e->thread, NULL);
+	pthread_cond_destroy(&e->idle_cv);
 	pthread_cond_destroy(&e->cv);
 	pthread_mutex_destroy(&e->mu);
 	close(e->wake_r);
@@ -233,4 +244,26 @@ bool fuzzy_engine_take(fuzzy_engine *e, uint32_t *node)
 	}
 	pthread_mutex_unlock(&e->mu);
 	return have;
+}
+
+void fuzzy_engine_pause(fuzzy_engine *e)
+{
+	if (!e->started)
+		return;
+	pthread_mutex_lock(&e->mu);
+	e->paused = true;
+	while (e->busy) /* wait out any in-flight scan of the old arena */
+		pthread_cond_wait(&e->idle_cv, &e->mu);
+	e->result_ready = false; /* its node indices are about to be stale */
+	pthread_mutex_unlock(&e->mu);
+}
+
+void fuzzy_engine_resume(fuzzy_engine *e)
+{
+	if (!e->started)
+		return;
+	pthread_mutex_lock(&e->mu);
+	e->paused = false;
+	pthread_cond_signal(&e->cv);
+	pthread_mutex_unlock(&e->mu);
 }

@@ -38,6 +38,7 @@ void test_nav_siblings(void);
 void test_nav_enter_and_back(void);
 void test_nav_filter_timeout(void);
 void test_nav_dotfiles(void);
+void test_refresh_preserves_view(void);
 void test_toggle_matches_oracle(void);
 void test_nav_filter_buffer(void);
 void test_render_frame_layout(void);
@@ -57,6 +58,7 @@ void test_fuzzy_auto_expand(void);
 void test_fuzzy_fuzz(void);
 void test_engine_basic(void);
 void test_engine_convergence(void);
+void test_engine_pause_resume(void);
 
 int main(void)
 {
@@ -94,6 +96,7 @@ int main(void)
 	RUN(test_nav_enter_and_back);
 	RUN(test_nav_filter_timeout);
 	RUN(test_nav_dotfiles);
+	RUN(test_refresh_preserves_view);
 	RUN(test_toggle_matches_oracle);
 	RUN(test_nav_filter_buffer);
 	RUN(test_render_frame_layout);
@@ -113,6 +116,7 @@ int main(void)
 	RUN(test_fuzzy_fuzz);
 	RUN(test_engine_basic);
 	RUN(test_engine_convergence);
+	RUN(test_engine_pause_resume);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);

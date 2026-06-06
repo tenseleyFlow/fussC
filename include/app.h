@@ -72,6 +72,16 @@ bool app_filter_expired(const app *a, uint64_t now_ns);
 /* Mark every ancestor of `node` expanded so the node becomes visible. */
 void app_expand_to(app *a, uint32_t node);
 
+/*
+ * Refresh helpers (used to rebuild the tree after a git mutation while keeping
+ * the user's view). Snapshot the collapsed-directory paths and selected path
+ * before the rebuild; reapply them after.
+ */
+char **app_collapsed_paths(const app *a, uint32_t *count); /* caller frees */
+void app_collapse_paths(app *a, char *const *paths, uint32_t count);
+char *app_selected_path_dup(const app *a); /* caller frees, may be NULL */
+void app_select_path(app *a, const char *path);
+
 /* Apply a fuzzy result: NODE_NIL leaves the selection put (no match); otherwise
  * expand the path to `node`, re-flatten, and select it. The match itself is
  * computed elsewhere (the scorer single-threaded, or the worker thread) so app

@@ -56,6 +56,7 @@ typedef struct {
 	pthread_t thread;
 	pthread_mutex_t mu;
 	pthread_cond_t cv;
+	pthread_cond_t idle_cv; /* signalled when the worker finishes a scan */
 
 	/* guarded by mu */
 	const tree *arena;
@@ -63,6 +64,8 @@ typedef struct {
 	uint64_t generation; /* bumped on each submit */
 	uint64_t processed;  /* generation the worker last began scoring */
 	bool quit;
+	bool paused; /* refresh in progress: the worker must not scan */
+	bool busy;   /* the worker is mid-scan right now */
 	uint64_t result_gen;
 	uint32_t result_node;
 	bool result_ready;
@@ -83,5 +86,13 @@ void fuzzy_submit(fuzzy_engine *e, const tree *arena, const char *query);
 /* Drain the wake pipe and, if the latest generation's result is ready, store it
  * in *node and return true. Returns false when no fresh result is pending. */
 bool fuzzy_engine_take(fuzzy_engine *e, uint32_t *node);
+
+/*
+ * Quiesce the worker so the arena can be freed and rebuilt safely: blocks until
+ * any in-flight scan finishes, prevents new scans, and drops any pending result
+ * (its node indices would be stale after the rebuild). Pair with resume.
+ */
+void fuzzy_engine_pause(fuzzy_engine *e);
+void fuzzy_engine_resume(fuzzy_engine *e);
 
 #endif /* FUSSY_FUZZY_H */
