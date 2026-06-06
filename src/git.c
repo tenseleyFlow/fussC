@@ -1,8 +1,11 @@
 #include "git.h"
 
+#include <errno.h>
 #include <git2.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "util.h"
 
@@ -154,5 +157,323 @@ int git_load_tree(git_ctx *g, tree *t, bool all)
 		git_index_free(idx);
 	}
 
+	return 0;
+}
+
+/* ---- local mutations ----------------------------------------------------- */
+
+static void errno_msg(char *err, size_t errlen, const char *what)
+{
+	if (err && errlen)
+		snprintf(err, errlen, "%s: %s", what, strerror(errno));
+}
+
+/* Stage the given pathspec (file, dir, or - with an empty spec - everything),
+ * matching `git add --all` semantics (adds, modifies, and stages deletions). */
+static int stage_spec(git_repository *repo, const char *path, char *err,
+                      size_t errlen)
+{
+	git_index *idx = NULL;
+	if (git_repository_index(&idx, repo) != 0) {
+		copy_err(err, errlen, "open index failed");
+		return -1;
+	}
+	char *one[1] = {(char *)path};
+	git_strarray ps = {path ? one : NULL, path ? 1 : 0};
+	int rc = git_index_add_all(idx, &ps, GIT_INDEX_ADD_DEFAULT, NULL, NULL);
+	if (rc == 0)
+		rc = git_index_write(idx);
+	git_index_free(idx);
+	if (rc != 0) {
+		copy_err(err, errlen, "stage failed");
+		return -1;
+	}
+	return 0;
+}
+
+int gitop_stage(git_ctx *g, const char *path, char *err, size_t errlen)
+{
+	return stage_spec(g->repo, path, err, errlen);
+}
+
+int gitop_stage_all(git_ctx *g, char *err, size_t errlen)
+{
+	return stage_spec(g->repo, NULL, err, errlen);
+}
+
+/* Reset index entries to HEAD (unstage). Without a HEAD (unborn branch),
+ * "unstaging" means removing the entry/entries from the index. path == NULL
+ * means all. */
+static int unstage_spec(git_repository *repo, const char *path, char *err,
+                        size_t errlen)
+{
+	git_object *head = NULL;
+	if (git_revparse_single(&head, repo, "HEAD") != 0) {
+		git_index *idx = NULL;
+		if (git_repository_index(&idx, repo) != 0) {
+			copy_err(err, errlen, "open index failed");
+			return -1;
+		}
+		int rc = path ? git_index_remove_bypath(idx, path)
+		              : git_index_clear(idx);
+		if (rc == 0)
+			rc = git_index_write(idx);
+		git_index_free(idx);
+		if (rc != 0) {
+			copy_err(err, errlen, "unstage failed");
+			return -1;
+		}
+		return 0;
+	}
+
+	int rc;
+	if (path) {
+		char *one[1] = {(char *)path};
+		git_strarray ps = {one, 1};
+		rc = git_reset_default(repo, head, &ps);
+	} else {
+		/* Reset the whole index to HEAD (HEAD does not move, worktree
+		 * untouched) - a literal "." pathspec would match nothing. */
+		rc = git_reset(repo, head, GIT_RESET_MIXED, NULL);
+	}
+	git_object_free(head);
+	if (rc != 0) {
+		copy_err(err, errlen, "unstage failed");
+		return -1;
+	}
+	return 0;
+}
+
+int gitop_unstage(git_ctx *g, const char *path, char *err, size_t errlen)
+{
+	return unstage_spec(g->repo, path, err, errlen);
+}
+
+int gitop_unstage_all(git_ctx *g, char *err, size_t errlen)
+{
+	return unstage_spec(g->repo, NULL, err, errlen);
+}
+
+/* Build a tree object from the current index. */
+static int index_tree(git_repository *repo, git_tree **out, char *err,
+                      size_t errlen)
+{
+	git_index *idx = NULL;
+	git_oid oid;
+	if (git_repository_index(&idx, repo) != 0) {
+		copy_err(err, errlen, "open index failed");
+		return -1;
+	}
+	int rc = git_index_write_tree(&oid, idx);
+	git_index_free(idx);
+	if (rc != 0) {
+		copy_err(err, errlen, "write tree failed");
+		return -1;
+	}
+	if (git_tree_lookup(out, repo, &oid) != 0) {
+		copy_err(err, errlen, "tree lookup failed");
+		return -1;
+	}
+	return 0;
+}
+
+int gitop_commit(git_ctx *g, const char *message, char *err, size_t errlen)
+{
+	git_repository *repo = g->repo;
+	git_tree *tree = NULL;
+	git_signature *sig = NULL;
+	git_commit *parent = NULL;
+	int rc = -1;
+
+	if (index_tree(repo, &tree, err, errlen) != 0)
+		goto done;
+	if (git_signature_default(&sig, repo) != 0) {
+		copy_err(err, errlen, "set user.name and user.email");
+		goto done;
+	}
+
+	git_oid parent_oid;
+	int has_head = git_reference_name_to_id(&parent_oid, repo, "HEAD") == 0;
+	if (has_head && git_commit_lookup(&parent, repo, &parent_oid) != 0) {
+		copy_err(err, errlen, "HEAD lookup failed");
+		goto done;
+	}
+
+	git_oid commit_oid;
+	const git_commit *parents[1] = {parent};
+	rc = git_commit_create(&commit_oid, repo, "HEAD", sig, sig, NULL,
+	                       message, tree, has_head ? 1 : 0,
+	                       has_head ? parents : NULL);
+	if (rc != 0) {
+		copy_err(err, errlen, "commit failed");
+		rc = -1;
+	}
+
+done:
+	if (parent)
+		git_commit_free(parent);
+	if (sig)
+		git_signature_free(sig);
+	if (tree)
+		git_tree_free(tree);
+	return rc;
+}
+
+int gitop_amend(git_ctx *g, const char *message, char *err, size_t errlen)
+{
+	git_repository *repo = g->repo;
+	git_commit *head = NULL;
+	git_tree *tree = NULL;
+	git_signature *sig = NULL;
+	int rc = -1;
+
+	git_oid head_oid;
+	if (git_reference_name_to_id(&head_oid, repo, "HEAD") != 0 ||
+	    git_commit_lookup(&head, repo, &head_oid) != 0) {
+		copy_err(err, errlen, "no commit to amend");
+		goto done;
+	}
+	if (index_tree(repo, &tree, err, errlen) != 0)
+		goto done;
+	if (git_signature_default(&sig, repo) != 0) {
+		copy_err(err, errlen, "set user.name and user.email");
+		goto done;
+	}
+
+	git_oid newoid;
+	rc = git_commit_amend(&newoid, head, "HEAD", NULL, sig, NULL, message,
+	                      tree);
+	if (rc != 0) {
+		copy_err(err, errlen, "amend failed");
+		rc = -1;
+	}
+
+done:
+	if (head)
+		git_commit_free(head);
+	if (tree)
+		git_tree_free(tree);
+	if (sig)
+		git_signature_free(sig);
+	return rc;
+}
+
+char *gitop_last_message(git_ctx *g)
+{
+	git_oid oid;
+	git_commit *c = NULL;
+	char *out = NULL;
+	if (git_reference_name_to_id(&oid, g->repo, "HEAD") == 0 &&
+	    git_commit_lookup(&c, g->repo, &oid) == 0) {
+		const char *m = git_commit_message(c);
+		if (m)
+			out = xstrdup(m);
+		git_commit_free(c);
+	}
+	return out;
+}
+
+int gitop_discard(git_ctx *g, const char *path, bool untracked, char *err,
+                  size_t errlen)
+{
+	if (untracked) {
+		if (unlink(path) != 0 && errno != ENOENT) {
+			errno_msg(err, errlen, "discard");
+			return -1;
+		}
+		return 0;
+	}
+
+	/* Tracked: reset the index entry to HEAD, then force-checkout HEAD. */
+	if (unstage_spec(g->repo, path, err, errlen) != 0)
+		return -1;
+
+	git_checkout_options opts;
+	git_checkout_options_init(&opts, GIT_CHECKOUT_OPTIONS_VERSION);
+	opts.checkout_strategy = GIT_CHECKOUT_FORCE;
+	char *one[1] = {(char *)path};
+	opts.paths.strings = one;
+	opts.paths.count = 1;
+	if (git_checkout_head(g->repo, &opts) != 0) {
+		copy_err(err, errlen, "discard failed");
+		return -1;
+	}
+	return 0;
+}
+
+int gitop_delete(git_ctx *g, const char *path, bool untracked, char *err,
+                 size_t errlen)
+{
+	if (!untracked) {
+		git_index *idx = NULL;
+		if (git_repository_index(&idx, g->repo) != 0) {
+			copy_err(err, errlen, "open index failed");
+			return -1;
+		}
+		int rc = git_index_remove_bypath(idx, path);
+		if (rc == 0)
+			rc = git_index_write(idx);
+		git_index_free(idx);
+		if (rc != 0) {
+			copy_err(err, errlen, "delete (index) failed");
+			return -1;
+		}
+	}
+	if (unlink(path) != 0 && errno != ENOENT) {
+		errno_msg(err, errlen, "delete");
+		return -1;
+	}
+	return 0;
+}
+
+int gitop_rename(git_ctx *g, const char *oldpath, const char *newpath,
+                 char *err, size_t errlen)
+{
+	if (rename(oldpath, newpath) != 0) {
+		errno_msg(err, errlen, "rename");
+		return -1;
+	}
+	/* Keep the index consistent when the old path was tracked. */
+	git_index *idx = NULL;
+	if (git_repository_index(&idx, g->repo) == 0) {
+		if (git_index_get_bypath(idx, oldpath, 0) != NULL) {
+			git_index_remove_bypath(idx, oldpath);
+			git_index_add_bypath(idx, newpath);
+			git_index_write(idx);
+		}
+		git_index_free(idx);
+	}
+	return 0;
+}
+
+int gitop_tag(git_ctx *g, const char *name, const char *message, char *err,
+              size_t errlen)
+{
+	git_object *target = NULL;
+	if (git_revparse_single(&target, g->repo, "HEAD") != 0) {
+		copy_err(err, errlen, "no commit to tag");
+		return -1;
+	}
+
+	git_oid oid;
+	int rc;
+	if (message != NULL && message[0] != '\0') {
+		git_signature *sig = NULL;
+		if (git_signature_default(&sig, g->repo) != 0) {
+			copy_err(err, errlen, "set user.name and user.email");
+			git_object_free(target);
+			return -1;
+		}
+		rc = git_tag_create(&oid, g->repo, name, target, sig, message,
+		                    0);
+		git_signature_free(sig);
+	} else {
+		rc = git_tag_create_lightweight(&oid, g->repo, name, target, 0);
+	}
+	git_object_free(target);
+	if (rc != 0) {
+		copy_err(err, errlen, "tag failed");
+		return -1;
+	}
 	return 0;
 }

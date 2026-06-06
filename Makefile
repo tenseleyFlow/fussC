@@ -43,7 +43,7 @@ TESTOBJS = test/test_main.o test/test_util.o test/test_status.o \
            test/test_tree.o test/test_flatten.o test/test_git.o \
            test/test_render.o test/test_width.o test/test_key.o \
            test/test_nav.o test/test_irender.o test/test_input.o \
-           test/test_fuzzy.o test/test_fuzzy_engine.o
+           test/test_fuzzy.o test/test_fuzzy_engine.o test/test_git_ops.o
 
 .SUFFIXES: .c .o
 .c.o:
