@@ -19,7 +19,7 @@ typedef struct {
 static void sb_put(strbuf *s, const char *str)
 {
 	size_t n = strlen(str);
-	if (s->len + n + 1 > s->cap) {
+	if (s->buf == NULL || s->len + n + 1 > s->cap) {
 		while (s->len + n + 1 > s->cap)
 			s->cap = s->cap ? s->cap * 2 : 256;
 		s->buf = xrealloc(s->buf, s->cap);
@@ -106,7 +106,7 @@ void render_tree(FILE *out, const tree *t, const flat_list *f, bool color)
 
 static void sb_putc(strbuf *s, char c)
 {
-	if (s->len + 2 > s->cap) {
+	if (s->buf == NULL || s->len + 2 > s->cap) {
 		s->cap = s->cap ? s->cap * 2 : 64;
 		s->buf = xrealloc(s->buf, s->cap);
 	}
@@ -558,11 +558,11 @@ char **render_frame(const app *a, const char *repo, const char *branch,
 	const flat_list *f = &a->visible;
 	uint16_t maxd = 0;
 	bool *is_last = compute_is_last(f, &maxd);
-	bool *lad =
-	    (maxd + 1) ? xmalloc((size_t)(maxd + 1) * sizeof(bool)) : NULL;
+	/* maxd+1 is always >= 1 (maxd is uint16_t), so this never allocates 0.
+	 */
+	bool *lad = xmalloc((size_t)(maxd + 1) * sizeof(bool));
 	for (uint16_t k = 0; k <= maxd; k++)
-		if (lad)
-			lad[k] = false;
+		lad[k] = false;
 
 	int len = (int)f->len;
 	int start = 0;
@@ -576,16 +576,14 @@ char **render_frame(const app *a, const char *repo, const char *branch,
 
 	/* Advance the ancestor-last state up to the first visible row. */
 	for (int i = 0; i < start && i < len; i++)
-		if (lad)
-			lad[f->rows[i].depth] = is_last[i];
+		lad[f->rows[i].depth] = is_last[i];
 
 	for (int r = 0; r < tree_h; r++) {
 		int vis = start + r;
 		int row = tree_top + r;
 		if (vis < len) {
 			uint16_t d = f->rows[vis].depth;
-			if (lad)
-				lad[d] = is_last[vis];
+			lad[d] = is_last[vis];
 			lines[row] = build_tree_line(
 			    &a->t, f->rows[vis].node, lad, d, is_last[vis],
 			    color, vis == (int)a->selected, cols);

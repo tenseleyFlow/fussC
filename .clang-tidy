@@ -1,0 +1,25 @@
+# clang-tidy configuration for fussC.
+#
+# We run the clang static analyzer - the high-signal, bug-finding family - and
+# treat every finding as an error. We deliberately do NOT enable the broad
+# readability / naming / modernize / bugprone / portability families:
+#   - clang-format already owns layout, and the code follows its own house idioms.
+#   - In hand-written C those families are mostly noise here: deliberate byte
+#     arithmetic with explicit casts (narrowing), intentional switch fall-through
+#     to a post-switch return (missing-default), char**->void* at free()/realloc
+#     (multi-level-implicit-pointer-conversion), and same-type adjacent params
+#     (easily-swappable-parameters). Acting on them would add casts and dead
+#     branches without making the code safer.
+#
+# Waived analyzer check:
+#   clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling flags
+#   every memcpy/memmove/strncpy in favor of the C11 Annex K *_s functions. Annex
+#   K is optional and absent from glibc, musl, and the BSD libcs, so using it
+#   would break portability - a non-negotiable. We bounds-check by hand and build
+#   under ASan/UBSan + _FORTIFY_SOURCE, which cover the same ground portably.
+Checks: >
+  -*,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(include|test)/.*\.h'

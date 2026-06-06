@@ -83,6 +83,53 @@ jobs:
             make
             make test
 
+  analyze:
+    name: clang-tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgit2-dev pkg-config clang-tidy-19
+      # .clang-tidy scopes this to the clang static analyzer with findings as
+      # errors. Flags are passed directly; no compile_commands.json needed.
+      - name: Static analysis
+        run: |
+          clang-tidy-19 --version | head -1
+          clang-tidy-19 src/*.c test/*.c -- \
+            -std=c11 -D_DEFAULT_SOURCE -Iinclude -Itest $(pkg-config --cflags libgit2)
+
+  cppcheck:
+    name: cppcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: cppcheck
+        run: |
+          cppcheck --version
+          cppcheck --std=c11 --enable=warning,performance,portability \
+            --error-exitcode=1 --inline-suppr --quiet \
+            --suppress=missingIncludeSystem -Iinclude -Itest src test
+
+  valgrind:
+    name: valgrind (memcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgit2-dev pkg-config valgrind
+      # Plain -O0 -g build (no sanitizer - valgrind and ASan are incompatible).
+      # memcheck traces only the test runner; git/pager subprocesses are exec'd
+      # and not followed.
+      - name: Build test runner
+        run: make OPT="-O0 -g" test/run
+      - name: memcheck
+        run: |
+          valgrind --version
+          valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=definite \
+            --suppressions=.github/valgrind.supp ./test/run
+
   format:
     name: clang-format
     runs-on: ubuntu-latest

@@ -1,0 +1,10 @@
+# valgrind memcheck suppressions for fussC.
+#
+# Scope is deliberately tight: the CI job runs with
+#   --leak-check=full --errors-for-leak-kinds=definite
+# so only *definite* leaks fail the build. "Still reachable" blocks from
+# libgit2/OpenSSL/zlib one-time global init are not errors and need no entry.
+#
+# Add a suppression here ONLY for a confirmed false positive inside a third-party
+# library (never to hide a leak in our own code). Each entry must carry a comment
+# explaining why it is safe. None needed so far.

@@ -8,10 +8,20 @@
  * Allocation wrappers that abort on out-of-memory. fussy is a short-lived
  * interactive tool; on a failed allocation there is nothing useful to do but
  * report and exit, so callers never have to null-check these.
+ *
+ * RETURNS_NONNULL makes that contract machine-checkable: the compiler and the
+ * static analyzer know the result is never NULL, which kills false-positive
+ * null-dereference reports at every call site. It is a no-op where unsupported.
  */
-void *xmalloc(size_t n);
-void *xrealloc(void *p, size_t n);
-char *xstrdup(const char *s);
+#if defined(__GNUC__) || defined(__clang__)
+#define RETURNS_NONNULL __attribute__((returns_nonnull))
+#else
+#define RETURNS_NONNULL
+#endif
+
+RETURNS_NONNULL void *xmalloc(size_t n);
+RETURNS_NONNULL void *xrealloc(void *p, size_t n);
+RETURNS_NONNULL char *xstrdup(const char *s);
 
 /* Monotonic clock in nanoseconds (CLOCK_MONOTONIC), for the filter timeout. */
 uint64_t mono_ns(void);
