@@ -278,8 +278,10 @@ static void browse_commits(loopctx *L)
 	if (chosen >= 0) {
 		char q[64], cmd[200];
 		shquote(log.shas[chosen], q, sizeof(q));
-		snprintf(cmd, sizeof(cmd),
-		         "git show --color=always %s | ${PAGER:-less -R}", q);
+		/* Let git drive its own pager: it sets LESS=FRX (so even a
+		 * plain PAGER=less shows color) and gates color on a tty - no
+		 * raw ESC leaking into a pager that lacks -R. */
+		snprintf(cmd, sizeof(cmd), "git show %s", q);
 		run_viewer(L, cmd);
 	}
 	git_log_free(&log);
@@ -335,9 +337,9 @@ static void run_command(loopctx *L, uint32_t letter)
 	case 'F':
 		net_dispatch(L, NET_FETCH);
 		break;
-	case 'G': /* full status in the pager */
-		run_viewer(L, "git -c color.status=always status | "
-		              "${PAGER:-less -R}");
+	case 'G': /* full status in the pager (git drives the pager: LESS=FRX)
+	           */
+		run_viewer(L, "git -c color.status=always --paginate status");
 		break;
 	case 'B': /* commit-history browser */
 		browse_commits(L);
@@ -347,10 +349,10 @@ static void run_command(loopctx *L, uint32_t letter)
 			char q[1100], cmd[1300];
 			shquote(p, q, sizeof(q));
 			if (sel_status(a) & (ST_STAGED | ST_UNSTAGED))
+				/* git auto-pages diff and gates color on a tty.
+				 */
 				snprintf(cmd, sizeof(cmd),
-				         "git diff --color=always HEAD -- %s "
-				         "| ${PAGER:-less -R}",
-				         q);
+				         "git diff HEAD -- %s", q);
 			else
 				snprintf(cmd, sizeof(cmd),
 				         "${PAGER:-less -R} %s", q);
