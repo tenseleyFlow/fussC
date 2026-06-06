@@ -578,11 +578,66 @@ static void browse_reset(loopctx *L)
 	git_log_free(&log);
 }
 
+/* Blame the currently-selected file: `git blame --color-by-age` rendered in
+ * paige (age-colored, wrapped). Operates on the main tree's selection. */
+static void browse_blame(loopctx *L)
+{
+	uint32_t n = app_selected_node(L->a);
+	if (n == NODE_NIL || !node_is_file(&L->a->t.nodes[n])) {
+		set_status(L->a, "select a file to blame");
+		return;
+	}
+	const char *path = L->a->t.nodes[n].path;
+
+	char *argv[10];
+	int i = 0;
+	argv[i++] = "git";
+	if (L->color) {
+		argv[i++] = "-c";
+		argv[i++] = "color.ui=always";
+	}
+	argv[i++] = "blame";
+	if (L->color)
+		argv[i++] = "--color-by-age";
+	argv[i++] = "--date=short";
+	argv[i++] = (char *)path;
+	argv[i] = NULL;
+
+	char *out = NULL, *err = NULL;
+	int rc = proc_run(argv, &out, &err);
+	if (rc != 0 || out == NULL || out[0] == '\0') {
+		char *nl = err ? strchr(err, '\n') : NULL;
+		if (nl)
+			*nl = '\0';
+		set_status(L->a, (err && err[0]) ? err : "blame unavailable");
+		free(out);
+		free(err);
+		return;
+	}
+	free(err);
+
+	int nlines = 0;
+	char **lines = str_split_lines(out, &nlines);
+	struct show_doc d = {lines, nlines};
+	paige_doc doc = {0};
+	doc.ctx = &d;
+	doc.render_line = show_render_line;
+	doc.title = path;
+	paige_opts opts = {0};
+	term_restore();
+	paige_run(&doc, &opts);
+	term_resume();
+	screen_invalidate(L->s);
+	str_free_lines(lines, nlines);
+	free(out);
+}
+
 /* The browse menu: a picker over the available browsers (itself reusing the
  * widget). Scales as browsers are added without spending a key on each. */
 static void browse_menu(loopctx *L)
 {
-	char *items[] = {"Commits", "Reflog", "Branches", "Stashes", "Reset"};
+	char *items[] = {"Commits", "Reflog", "Branches",
+	                 "Stashes", "Reset",  "Blame current file"};
 	picker_spec sp = {.title = "Browse",
 	                  .items = items,
 	                  .count = (int)(sizeof(items) / sizeof(*items))};
@@ -604,6 +659,9 @@ static void browse_menu(loopctx *L)
 		break;
 	case 4:
 		browse_reset(L);
+		break;
+	case 5:
+		browse_blame(L);
 		break;
 	default:
 		break;
