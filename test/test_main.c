@@ -11,6 +11,9 @@ void test_status_is_dirty(void);
 void test_tree_build(void);
 void test_tree_merge_status(void);
 void test_tree_case_order(void);
+void test_flatten_expanded(void);
+void test_flatten_collapsed(void);
+void test_flatten_empty(void);
 
 int main(void)
 {
@@ -21,6 +24,9 @@ int main(void)
 	RUN(test_tree_build);
 	RUN(test_tree_merge_status);
 	RUN(test_tree_case_order);
+	RUN(test_flatten_expanded);
+	RUN(test_flatten_collapsed);
+	RUN(test_flatten_empty);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);
