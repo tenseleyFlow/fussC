@@ -19,6 +19,10 @@ void test_git_not_a_repo(void);
 void test_render_golden(void);
 void test_render_pipe_gutter(void);
 void test_render_color(void);
+void test_width_ascii(void);
+void test_width_wide(void);
+void test_width_combining(void);
+void test_utf8_decode(void);
 
 int main(void)
 {
@@ -37,6 +41,10 @@ int main(void)
 	RUN(test_render_golden);
 	RUN(test_render_pipe_gutter);
 	RUN(test_render_color);
+	RUN(test_width_ascii);
+	RUN(test_width_wide);
+	RUN(test_width_combining);
+	RUN(test_utf8_decode);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);
