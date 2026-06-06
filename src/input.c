@@ -63,6 +63,10 @@ action input_classify(int key)
 		a.kind = ACT_TOGGLE_DOTFILES;
 		return a;
 	}
+	if (key == '?') { /* keymap overlay (rare in filenames; reserved) */
+		a.kind = ACT_HELP;
+		return a;
+	}
 	if (key >= 'A' && key <= 'Z') {
 		a.kind = ACT_COMMAND; /* dispatched in Sprint 4 */
 		a.cp = (uint32_t)key;

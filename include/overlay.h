@@ -20,6 +20,7 @@ typedef enum {
 	OV_TAG,     /* tag name */
 	OV_RENAME,  /* rename input */
 	OV_CONFIRM, /* y/n confirmation */
+	OV_HELP,    /* read-only keymap reference */
 } overlay_kind;
 
 enum { CONF_DISCARD, CONF_DELETE };
@@ -49,6 +50,7 @@ void overlay_open_commit(overlay *o, bool amend, const char *prefill);
 void overlay_open_tag(overlay *o);
 void overlay_open_rename(overlay *o, const char *current);
 void overlay_open_confirm(overlay *o, const char *prompt);
+void overlay_open_help(overlay *o);
 
 /* Text editing (no-ops while OV_CONFIRM is up). */
 void overlay_insert(overlay *o, uint32_t cp);

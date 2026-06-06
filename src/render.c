@@ -172,12 +172,11 @@ static char *build_header(const char *repo, const char *branch, const app *a,
 	return s.buf ? s.buf : xstrdup("");
 }
 
-/* The footer hint, with the grey "type:" slot showing the live filter text in
- * place of the word "filter" once you start typing. */
-static char *build_footer(const app *a, bool color)
+/* Footer row 1: the grey "type:" slot shows the live filter in place of the
+ * word "filter"; a pending git-op status message takes over the whole row. */
+static char *build_footer_nav(const app *a, bool color)
 {
 	strbuf s = {0};
-	/* A pending status message (git op result) takes over the footer. */
 	if (a->status[0] != '\0') {
 		if (color)
 			sb_put(&s, "\033[33m");
@@ -191,7 +190,21 @@ static char *build_footer(const app *a, bool color)
 	sb_put(&s, "type:");
 	sb_put(&s, a->filter_len > 0 ? a->filter : "filter");
 	sb_put(&s, "  \342\206\221\342\206\223 sibling  \342\206\222 in  "
-	           "\342\206\220 out  Space peek  H hidden  Q quit");
+	           "\342\206\220 out  Space peek  H hidden  ?:help  Q quit");
+	if (color)
+		sb_put(&s, "\033[0m");
+	return s.buf ? s.buf : xstrdup("");
+}
+
+/* Footer row 2: git commands, ordered by frequency so narrow terminals clip the
+ * least-used keys first (the full set lives in the ? overlay). */
+static char *build_footer_git(bool color)
+{
+	strbuf s = {0};
+	if (color)
+		sb_put(&s, "\033[90m");
+	sb_put(&s, "A stage  C commit  U unstage  X discard  D delete  "
+	           "R rename  T tag  M amend  S/Z all");
 	if (color)
 		sb_put(&s, "\033[0m");
 	return s.buf ? s.buf : xstrdup("");
@@ -346,11 +359,30 @@ static void draw_overlay(char **lines, int rows, int cols, const overlay *o,
 	if (inner > 56)
 		inner = 56;
 
-	/* Content lines: a fixed hint for confirm, else the wrapped input with
-	 * a block cursor spliced in at the edit position. */
+	/* Content lines: the keymap for help, a fixed hint for confirm, else
+	 * the wrapped input with a block cursor spliced in at the edit pos. */
+	static const char *const HELP[] = {
+	    "Navigation",
+	    "  arrows / Ctrl-N P B F   move & enter dirs",
+	    "  Space  expand/collapse      H  hidden files",
+	    "  type a name to fuzzy-jump",
+	    "Git",
+	    "  A stage     U unstage    S stage-all",
+	    "  Z unstage-all   C commit     M amend",
+	    "  X discard   D delete    R rename    T tag",
+	    "  Q quit      ? this help",
+	};
 	int ncontent = 0;
 	char **content;
-	if (o->kind == OV_CONFIRM) {
+	if (o->kind == OV_HELP) {
+		int n = (int)(sizeof(HELP) / sizeof(*HELP));
+		content = xmalloc((size_t)n * sizeof(*content));
+		for (int i = 0; i < n; i++)
+			content[i] = xstrdup(HELP[i]);
+		ncontent = n;
+		if (inner < 44)
+			inner = 44; /* keep the wide help lines readable */
+	} else if (o->kind == OV_CONFIRM) {
 		content = xmalloc(sizeof(*content));
 		content[0] = xstrdup("y: yes    n: no");
 		ncontent = 1;
@@ -373,6 +405,7 @@ static void draw_overlay(char **lines, int rows, int cols, const overlay *o,
 	}
 
 	const char *hint = o->kind == OV_CONFIRM  ? ""
+	                   : o->kind == OV_HELP   ? "any key to close"
 	                   : o->kind == OV_COMMIT ? "Enter commit  Esc cancel"
 	                   : o->kind == OV_RENAME
 	                       ? "Enter rename  Esc cancel"
@@ -460,8 +493,11 @@ char **render_frame(const app *a, const char *repo, const char *branch,
 		free(h);
 	}
 
+	/* Footer is two rows (nav + git) when there's room, one when cramped.
+	 */
+	int foot_rows = rows >= 3 ? 2 : (rows >= 2 ? 1 : 0);
 	int tree_top = 1;
-	int tree_h = rows - 2; /* rows minus header and footer */
+	int tree_h = rows - 1 - foot_rows;
 	if (tree_h < 0)
 		tree_h = 0;
 
@@ -504,8 +540,13 @@ char **render_frame(const app *a, const char *repo, const char *branch,
 		}
 	}
 
-	if (rows >= 2) {
-		char *ft = build_footer(a, color);
+	if (foot_rows >= 1) { /* nav row */
+		char *ft = build_footer_nav(a, color);
+		lines[rows - foot_rows] = clip_to_width(ft, cols);
+		free(ft);
+	}
+	if (foot_rows >= 2) { /* git row */
+		char *ft = build_footer_git(color);
 		lines[rows - 1] = clip_to_width(ft, cols);
 		free(ft);
 	}

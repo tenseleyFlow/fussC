@@ -22,6 +22,7 @@ typedef enum {
 	ACT_FILTER_BACKSPACE,
 	ACT_FILTER_CLEAR,
 	ACT_TOGGLE_DOTFILES,
+	ACT_HELP,    /* open the keymap overlay */
 	ACT_COMMAND, /* cp holds the uppercase command letter (Sprint 4) */
 	ACT_REDRAW,
 } action_kind;

@@ -45,6 +45,7 @@ void test_render_frame_layout(void);
 void test_render_frame_selection(void);
 void test_render_frame_filter_in_footer(void);
 void test_render_overlay_commit(void);
+void test_render_overlay_help(void);
 void test_render_overlay_confirm(void);
 void test_render_overlay_grows(void);
 void test_frame_diff_minimal(void);
@@ -110,6 +111,7 @@ int main(void)
 	RUN(test_render_frame_selection);
 	RUN(test_render_frame_filter_in_footer);
 	RUN(test_render_overlay_commit);
+	RUN(test_render_overlay_help);
 	RUN(test_render_overlay_confirm);
 	RUN(test_render_overlay_grows);
 	RUN(test_frame_diff_minimal);

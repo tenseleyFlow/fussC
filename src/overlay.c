@@ -71,6 +71,14 @@ void overlay_open_confirm(overlay *o, const char *prompt)
 	set_title(o, prompt);
 }
 
+void overlay_open_help(overlay *o)
+{
+	o->kind = OV_HELP;
+	o->amend = false;
+	set_text(o, "");
+	set_title(o, "Keys");
+}
+
 static bool editable(const overlay *o)
 {
 	return o->kind == OV_COMMIT || o->kind == OV_TAG ||

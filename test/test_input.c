@@ -33,6 +33,7 @@ void test_input_case_is_mode(void)
 	CHECK(input_classify('Z').kind == ACT_COMMAND);
 	CHECK(input_classify('Q').kind == ACT_QUIT);
 	CHECK(input_classify('H').kind == ACT_TOGGLE_DOTFILES);
+	CHECK(input_classify('?').kind == ACT_HELP); /* not a filter char */
 }
 
 void test_input_editing_and_quit(void)

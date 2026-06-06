@@ -254,6 +254,9 @@ static void apply_action(loopctx *L, action act)
 	case ACT_TOGGLE_DOTFILES:
 		app_toggle_dotfiles(a);
 		break;
+	case ACT_HELP:
+		overlay_open_help(&a->ov);
+		break;
 	case ACT_COMMAND:
 		run_command(L, act.cp);
 		break;
@@ -335,6 +338,12 @@ static void overlay_execute(loopctx *L)
 static void overlay_key(loopctx *L, int key)
 {
 	overlay *o = &L->a->ov;
+
+	if (o->kind == OV_HELP) { /* any key dismisses the keymap */
+		(void)key;
+		overlay_close(o);
+		return;
+	}
 
 	if (o->kind == OV_CONFIRM) {
 		if (key == 'y' || key == 'Y')

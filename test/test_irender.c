@@ -19,7 +19,8 @@ void test_render_frame_layout(void)
 	CHECK(strstr(f[0], "repo:trunk") != NULL); /* header */
 	CHECK(strstr(f[1], "alpha") != NULL);      /* first tree row */
 	CHECK(strstr(f[2], "beta") != NULL);
-	CHECK(strstr(f[5], "quit") != NULL); /* footer */
+	CHECK(strstr(f[4], "quit") != NULL);  /* footer row 1 (nav) */
+	CHECK(strstr(f[5], "stage") != NULL); /* footer row 2 (git) */
 	free_frame(f, 6);
 
 	app_free(&a);
@@ -50,18 +51,18 @@ void test_render_frame_filter_in_footer(void)
 	tree_add(&a.t, "file", ST_UNSTAGED);
 	app_reflatten(&a);
 
-	/* Empty filter: the footer shows the "type:filter" hint. */
-	char **f = render_frame(&a, "r", "b", false, 6, 40);
+	/* Empty filter: the nav footer row shows the "type:filter" hint. */
+	char **f = render_frame(&a, "r", "b", false, 6, 60);
 	CHECK(strstr(f[0], "/") == NULL); /* header has no query */
-	CHECK(strstr(f[5], "type:filter") != NULL);
+	CHECK(strstr(f[4], "type:filter") != NULL);
 	free_frame(f, 6);
 
 	/* Typed: the live text replaces "filter" in the footer slot. */
 	app_filter_push(&a, 'f');
 	app_filter_push(&a, 'i');
-	f = render_frame(&a, "r", "b", false, 6, 40);
-	CHECK(strstr(f[5], "type:fi") != NULL);
-	CHECK(strstr(f[5], "type:filter") == NULL);
+	f = render_frame(&a, "r", "b", false, 6, 60);
+	CHECK(strstr(f[4], "type:fi") != NULL);
+	CHECK(strstr(f[4], "type:filter") == NULL);
 	free_frame(f, 6);
 
 	app_free(&a);
@@ -86,6 +87,31 @@ void test_render_overlay_commit(void)
 	CHECK(title);
 	CHECK(text);
 	free_frame(f, 12);
+	app_free(&a);
+}
+
+void test_render_overlay_help(void)
+{
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "x", 0);
+	app_reflatten(&a);
+	overlay_open_help(&a.ov);
+
+	char **f = render_frame(&a, "r", "b", false, 20, 70);
+	bool title = false, git = false, close = false;
+	for (int i = 0; i < 20; i++) {
+		if (strstr(f[i], "Keys"))
+			title = true;
+		if (strstr(f[i], "A stage"))
+			git = true;
+		if (strstr(f[i], "any key to close"))
+			close = true;
+	}
+	CHECK(title);
+	CHECK(git);
+	CHECK(close);
+	free_frame(f, 20);
 	app_free(&a);
 }
 
