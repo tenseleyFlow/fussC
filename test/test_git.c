@@ -19,6 +19,13 @@ static void temp_dir(char *buf, size_t n, const char *tag)
 	snprintf(buf, n, "/tmp/fussy_%s_%ld", tag, (long)getpid());
 }
 
+/* The fixtures need the `git` CLI to build a repo. Skip (don't fail) when it is
+ * absent so the suite still runs on a minimal box. */
+static bool have_git(void)
+{
+	return system("command -v git >/dev/null 2>&1") == 0;
+}
+
 static void cleanup(const char *dir)
 {
 	char cmd[2100];
@@ -35,6 +42,11 @@ static bool has_bit(const tree *t, const char *path, file_status bit)
 
 void test_git_status(void)
 {
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_status (no git CLI)\n");
+		return;
+	}
+
 	char dir[256];
 	temp_dir(dir, sizeof(dir), "git");
 

@@ -67,7 +67,7 @@ jobs:
           release: "15.0"
           usesh: true
           prepare: |
-            pkg install -y libgit2 pkgconf
+            pkg install -y git libgit2 pkgconf
           run: |
             cc --version
             make
