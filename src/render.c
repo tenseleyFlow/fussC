@@ -350,6 +350,58 @@ static void box_line(char **lines, int rows, int cols, int row, int col,
 	free(s.buf);
 }
 
+/* Append `text` then pad with spaces to `width` DISPLAY columns (so columns of
+ * arrow glyphs - 1 column but multi-byte - still line up). */
+static void pad_to(strbuf *s, const char *text, int width)
+{
+	sb_put(s, text);
+	for (int w = (int)display_width(text); w < width; w++)
+		sb_putc(s, ' ');
+}
+
+/* The keymap reference, formatted as aligned two-column rows. */
+static char **build_help(int *count)
+{
+	static const char *const NAV[][2] = {
+	    {"\342\206\221 / Ctrl-P", "previous sibling"},
+	    {"\342\206\223 / Ctrl-N", "next sibling"},
+	    {"\342\206\222 / Ctrl-F", "enter directory"},
+	    {"\342\206\220 / Ctrl-B", "up a level / collapse"},
+	    {"Space", "expand / collapse"},
+	    {"type\342\200\246", "fuzzy-jump to a file"},
+	    {"H", "toggle hidden files"},
+	};
+	static const char *const GIT[][2] = {
+	    {"A stage", "U unstage"}, {"S stage all", "Z unstage all"},
+	    {"C commit", "M amend"},  {"X discard", "D delete"},
+	    {"R rename", "T tag"},
+	};
+	int nav_n = (int)(sizeof(NAV) / sizeof(*NAV));
+	int git_n = (int)(sizeof(GIT) / sizeof(*GIT));
+
+	char **lines = xmalloc((size_t)(nav_n + git_n + 4) * sizeof(*lines));
+	int n = 0;
+	lines[n++] = xstrdup("Navigation");
+	for (int i = 0; i < nav_n; i++) {
+		strbuf s = {0};
+		sb_put(&s, "  ");
+		pad_to(&s, NAV[i][0], 13);
+		sb_put(&s, NAV[i][1]);
+		lines[n++] = s.buf ? s.buf : xstrdup("");
+	}
+	lines[n++] = xstrdup("Git");
+	for (int i = 0; i < git_n; i++) {
+		strbuf s = {0};
+		sb_put(&s, "  ");
+		pad_to(&s, GIT[i][0], 16);
+		sb_put(&s, GIT[i][1]);
+		lines[n++] = s.buf ? s.buf : xstrdup("");
+	}
+	lines[n++] = xstrdup("Q quit    ? help    Esc cancel");
+	*count = n;
+	return lines;
+}
+
 static void draw_overlay(char **lines, int rows, int cols, const overlay *o,
                          bool color)
 {
@@ -361,27 +413,12 @@ static void draw_overlay(char **lines, int rows, int cols, const overlay *o,
 
 	/* Content lines: the keymap for help, a fixed hint for confirm, else
 	 * the wrapped input with a block cursor spliced in at the edit pos. */
-	static const char *const HELP[] = {
-	    "Navigation",
-	    "  arrows / Ctrl-N P B F   move & enter dirs",
-	    "  Space  expand/collapse      H  hidden files",
-	    "  type a name to fuzzy-jump",
-	    "Git",
-	    "  A stage     U unstage    S stage-all",
-	    "  Z unstage-all   C commit     M amend",
-	    "  X discard   D delete    R rename    T tag",
-	    "  Q quit      ? this help",
-	};
 	int ncontent = 0;
 	char **content;
 	if (o->kind == OV_HELP) {
-		int n = (int)(sizeof(HELP) / sizeof(*HELP));
-		content = xmalloc((size_t)n * sizeof(*content));
-		for (int i = 0; i < n; i++)
-			content[i] = xstrdup(HELP[i]);
-		ncontent = n;
-		if (inner < 44)
-			inner = 44; /* keep the wide help lines readable */
+		content = build_help(&ncontent);
+		if (inner < 40)
+			inner = 40; /* keep the aligned columns readable */
 	} else if (o->kind == OV_CONFIRM) {
 		content = xmalloc(sizeof(*content));
 		content[0] = xstrdup("y: yes    n: no");
