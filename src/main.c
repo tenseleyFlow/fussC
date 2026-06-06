@@ -1,6 +1,7 @@
 #include "app.h"
 #include "flatten.h"
 #include "fussy.h"
+#include "fuzzy.h"
 #include "git.h"
 #include "input.h"
 #include "render.h"
@@ -85,10 +86,15 @@ static void apply_action(app *a, action act, bool *running)
 		app_end(a);
 		break;
 	case ACT_FILTER_PUSH:
-		app_filter_push(a, act.cp); /* Sprint 3 triggers fuzzy here */
+		app_filter_push(a, act.cp);
+		app_apply_match(a, fuzzy_best_match(&a->t, a->filter));
 		break;
 	case ACT_FILTER_BACKSPACE:
 		app_filter_backspace(a);
+		if (a->filter_len > 0)
+			app_apply_match(a, fuzzy_best_match(&a->t, a->filter));
+		else
+			a->filter_nomatch = false;
 		break;
 	case ACT_FILTER_CLEAR:
 		app_filter_clear(a);

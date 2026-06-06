@@ -1,9 +1,18 @@
+#include "app.h"
 #include "fuzzy.h"
 #include "test.h"
 #include "tree.h"
 
 #include <stdbool.h>
 #include <string.h>
+
+static bool name_visible(const app *a, const char *name)
+{
+	for (uint32_t i = 0; i < a->visible.len; i++)
+		if (strcmp(a->t.nodes[a->visible.rows[i].node].name, name) == 0)
+			return true;
+	return false;
+}
 
 void test_fuzzy_tiers(void)
 {
@@ -51,6 +60,52 @@ void test_fuzzy_best_match(void)
 	CHECK(fuzzy_best_match(&t, "") == NODE_NIL);
 
 	tree_free(&t);
+}
+
+/* The headline fix: jump into a collapsed subtree by auto-expanding the path.
+ */
+void test_fuzzy_auto_expand(void)
+{
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "src/deep/buried.c", 0);
+	tree_add(&a.t, "top.txt", 0);
+	app_reflatten(&a);
+
+	/* Collapse src so buried.c is not in the visible list. */
+	uint32_t src = tree_find(&a.t, "src");
+	a.t.nodes[src].flags &= (uint8_t)~NF_EXPANDED;
+	app_reflatten(&a);
+	CHECK(!name_visible(&a, "buried.c"));
+
+	/* Type a query that only matches the buried file; jump to it. */
+	app_filter_push(&a, 'b');
+	app_filter_push(&a, 'u');
+	app_filter_push(&a, 'r');
+	app_apply_match(&a, fuzzy_best_match(&a.t, a.filter));
+
+	CHECK(name_visible(&a, "buried.c"));
+	CHECK_STR_EQ(a.t.nodes[app_selected_node(&a)].name, "buried.c");
+	CHECK(a.filter_nomatch == false);
+
+	app_free(&a);
+}
+
+void test_fuzzy_no_match_flag(void)
+{
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "alpha", 0);
+	app_reflatten(&a);
+
+	app_filter_push(&a, 'z'); /* no 'z' anywhere */
+	app_apply_match(&a, fuzzy_best_match(&a.t, a.filter));
+	CHECK(a.filter_nomatch == true);
+
+	app_filter_clear(&a);
+	CHECK(a.filter_nomatch == false);
+
+	app_free(&a);
 }
 
 /* Deterministic fuzz: the scorer never crashes and stays within bounds. */

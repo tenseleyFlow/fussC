@@ -171,7 +171,7 @@ static char *build_header(const char *repo, const char *branch, const app *a,
 	if (a->filter_len > 0) {
 		sb_put(&s, "  ");
 		if (color)
-			sb_put(&s, "\033[1m");
+			sb_put(&s, a->filter_nomatch ? "\033[31m" : "\033[1m");
 		sb_put(&s, "/");
 		sb_put(&s, a->filter);
 		if (color)

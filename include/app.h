@@ -23,6 +23,7 @@ typedef struct {
 	bool hide_dotfiles;
 	char filter[FILTER_MAX];
 	size_t filter_len;
+	bool filter_nomatch; /* last jump found nothing (header shows it) */
 } app;
 
 void app_init(app *a);
@@ -52,5 +53,14 @@ void app_toggle_dotfiles(app *a);
 void app_filter_push(app *a, uint32_t cp);
 void app_filter_backspace(app *a);
 void app_filter_clear(app *a);
+
+/* Mark every ancestor of `node` expanded so the node becomes visible. */
+void app_expand_to(app *a, uint32_t node);
+
+/* Apply a fuzzy result: NODE_NIL sets the no-match flag (when a query is
+ * present) and leaves the selection; otherwise expand the path to `node`,
+ * re-flatten, and select it. The match itself is computed elsewhere (the
+ * scorer single-threaded, or the worker thread) so app stays decoupled. */
+void app_apply_match(app *a, uint32_t node);
 
 #endif /* FUSSY_APP_H */

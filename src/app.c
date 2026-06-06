@@ -10,6 +10,7 @@ void app_init(app *a)
 	a->hide_dotfiles = false;
 	a->filter_len = 0;
 	a->filter[0] = '\0';
+	a->filter_nomatch = false;
 	flatten(&a->visible, &a->t, a->hide_dotfiles);
 }
 
@@ -172,4 +173,33 @@ void app_filter_clear(app *a)
 {
 	a->filter_len = 0;
 	a->filter[0] = '\0';
+	a->filter_nomatch = false;
+}
+
+void app_expand_to(app *a, uint32_t node)
+{
+	if (node == NODE_NIL)
+		return;
+	uint32_t p = a->t.nodes[node].parent;
+	while (p != NODE_NIL && p != 0) { /* up to, not including, the root */
+		a->t.nodes[p].flags |= NF_EXPANDED;
+		p = a->t.nodes[p].parent;
+	}
+}
+
+void app_apply_match(app *a, uint32_t node)
+{
+	if (node == NODE_NIL) {
+		a->filter_nomatch = a->filter_len > 0;
+		return;
+	}
+	a->filter_nomatch = false;
+	app_expand_to(a, node);
+	app_reflatten(a);
+	for (uint32_t i = 0; i < a->visible.len; i++) {
+		if (a->visible.rows[i].node == node) {
+			a->selected = i;
+			break;
+		}
+	}
 }
