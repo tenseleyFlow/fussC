@@ -1,5 +1,10 @@
 #include "width.h"
 
+#include <stdbool.h>
+
+#include "strbuf.h"
+#include "util.h"
+
 struct interval {
 	uint32_t lo;
 	uint32_t hi;
@@ -90,4 +95,40 @@ size_t display_width(const char *s)
 		w += (size_t)cp_width(cp);
 	}
 	return w;
+}
+
+char *clip_to_width(const char *in, int cols)
+{
+	strbuf out = {0};
+	int w = 0;
+	bool truncated = false;
+	const char *p = in;
+
+	while (*p != '\0') {
+		if (*p == 0x1B) { /* ESC [ ... <final> : copy verbatim */
+			sb_putc(&out, *p++);
+			if (*p == '[') {
+				sb_putc(&out, *p++);
+				while (*p && !(*p >= '@' && *p <= '~'))
+					sb_putc(&out, *p++);
+				if (*p)
+					sb_putc(&out, *p++);
+			}
+			continue;
+		}
+		uint32_t cp;
+		int n = utf8_decode(p, &cp);
+		int cw = cp_width(cp);
+		if (w + cw > cols) {
+			truncated = true;
+			break;
+		}
+		for (int i = 0; i < n; i++)
+			sb_putc(&out, p[i]);
+		w += cw;
+		p += n;
+	}
+	if (truncated)
+		sb_put(&out, "\033[0m");
+	return out.buf ? out.buf : xstrdup("");
 }

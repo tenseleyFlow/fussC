@@ -5,29 +5,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "strbuf.h"
 #include "term.h"
 #include "util.h"
 #include "width.h"
-
-/* Small growable string builder. */
-typedef struct {
-	char *buf;
-	size_t len;
-	size_t cap;
-} strbuf;
-
-static void sb_put(strbuf *s, const char *str)
-{
-	size_t n = strlen(str);
-	if (s->buf == NULL || s->len + n + 1 > s->cap) {
-		while (s->len + n + 1 > s->cap)
-			s->cap = s->cap ? s->cap * 2 : 256;
-		s->buf = xrealloc(s->buf, s->cap);
-	}
-	memcpy(s->buf + s->len, str, n);
-	s->len += n;
-	s->buf[s->len] = '\0';
-}
 
 /* Box-drawing gutter pieces (UTF-8). */
 #define G_PIPE  "\342\224\202   " /* "|   " vertical */
@@ -103,55 +84,6 @@ void render_tree(FILE *out, const tree *t, const flat_list *f, bool color)
 }
 
 /* ---- interactive rendering ---------------------------------------------- */
-
-static void sb_putc(strbuf *s, char c)
-{
-	if (s->buf == NULL || s->len + 2 > s->cap) {
-		s->cap = s->cap ? s->cap * 2 : 64;
-		s->buf = xrealloc(s->buf, s->cap);
-	}
-	s->buf[s->len++] = c;
-	s->buf[s->len] = '\0';
-}
-
-/* Copy `in`, keeping SGR escapes (zero width) but stopping once `cols` display
- * columns of real glyphs have been emitted. Closes any styling on truncation.
- */
-static char *clip_to_width(const char *in, int cols)
-{
-	strbuf out = {0};
-	int w = 0;
-	bool truncated = false;
-	const char *p = in;
-
-	while (*p != '\0') {
-		if (*p == 0x1B) { /* ESC [ ... <final> : copy verbatim */
-			sb_putc(&out, *p++);
-			if (*p == '[') {
-				sb_putc(&out, *p++);
-				while (*p && !(*p >= '@' && *p <= '~'))
-					sb_putc(&out, *p++);
-				if (*p)
-					sb_putc(&out, *p++);
-			}
-			continue;
-		}
-		uint32_t cp;
-		int n = utf8_decode(p, &cp);
-		int cw = cp_width(cp);
-		if (w + cw > cols) {
-			truncated = true;
-			break;
-		}
-		for (int i = 0; i < n; i++)
-			sb_putc(&out, p[i]);
-		w += cw;
-		p += n;
-	}
-	if (truncated)
-		sb_put(&out, "\033[0m");
-	return out.buf ? out.buf : xstrdup("");
-}
 
 static char *build_header(const char *repo, const char *branch, const app *a,
                           bool color)
@@ -293,12 +225,6 @@ static bool *compute_is_last(const flat_list *f, uint16_t *out_maxd)
 #define BOX_V        "\342\224\202"
 #define CURSOR       "\342\226\210" /* block cursor */
 #define OV_MAX_LINES 6
-
-static void sb_putn(strbuf *s, const char *str, size_t n)
-{
-	for (size_t i = 0; i < n; i++)
-		sb_putc(s, str[i]);
-}
 
 /* Wrap a UTF-8 string into lines of at most `width` display columns (never
  * splitting a codepoint). Always yields at least one line. */
@@ -676,20 +602,14 @@ void screen_invalidate(screen *s)
 	s->rows = 0;
 }
 
-void screen_draw(screen *s, const app *a, const char *repo, const char *branch,
-                 bool color)
+void screen_present(screen *s, char **frame, int rows)
 {
-	int rows, cols;
-	term_size(&rows, &cols);
-
 	bool full = (s->prev == NULL || s->rows != rows);
 	if (full) {
 		free_frame(s->prev, s->rows);
 		s->prev = NULL;
 		s->rows = rows;
 	}
-
-	char **frame = render_frame(a, repo, branch, color, rows, cols);
 
 	char *buf = NULL;
 	size_t blen = 0;
@@ -707,4 +627,13 @@ void screen_draw(screen *s, const app *a, const char *repo, const char *branch,
 	free_frame(s->prev, s->rows);
 	s->prev = frame;
 	s->rows = rows;
+}
+
+void screen_draw(screen *s, const app *a, const char *repo, const char *branch,
+                 bool color)
+{
+	int rows, cols;
+	term_size(&rows, &cols);
+	char **frame = render_frame(a, repo, branch, color, rows, cols);
+	screen_present(s, frame, rows);
 }

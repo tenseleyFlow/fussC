@@ -45,4 +45,13 @@ void screen_invalidate(screen *s);
 void screen_draw(screen *s, const app *a, const char *repo, const char *branch,
                  bool color);
 
+/*
+ * Present an already-built `rows`-line frame: diff it against the cached frame
+ * and write only the changed lines (full repaint when the row count changed or
+ * the cache is empty). Takes ownership of `frame` (stores it as the new cache,
+ * frees the old). Lets any producer - the app view or the picker - drive the
+ * incremental renderer.
+ */
+void screen_present(screen *s, char **frame, int rows);
+
 #endif /* FUSSY_RENDER_H */

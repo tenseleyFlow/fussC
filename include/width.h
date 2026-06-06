@@ -23,4 +23,10 @@ int cp_width(uint32_t cp);
 /* Sum of cp_width over a UTF-8 string. */
 size_t display_width(const char *s);
 
+/* Copy `in` into a new heap string (caller frees), keeping SGR escape sequences
+ * (zero display width) verbatim but stopping once `cols` display columns of
+ * real glyphs have been emitted. Resets styling (ESC[0m) on truncation so a
+ * clipped colored line never bleeds into the next. */
+char *clip_to_width(const char *in, int cols);
+
 #endif /* FUSSY_WIDTH_H */
