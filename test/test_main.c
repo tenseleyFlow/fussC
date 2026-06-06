@@ -17,6 +17,7 @@ void test_flatten_empty(void);
 void test_git_status(void);
 void test_git_ignored(void);
 void test_git_incoming(void);
+void test_e2e_stage_commit_push_pull(void);
 void test_git_not_a_repo(void);
 void test_gitop_stage_unstage(void);
 void test_gitop_stage_all(void);
@@ -93,6 +94,7 @@ int main(void)
 	RUN(test_git_status);
 	RUN(test_git_ignored);
 	RUN(test_git_incoming);
+	RUN(test_e2e_stage_commit_push_pull);
 	RUN(test_git_not_a_repo);
 	RUN(test_gitop_stage_unstage);
 	RUN(test_gitop_stage_all);

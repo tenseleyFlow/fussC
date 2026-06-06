@@ -44,7 +44,8 @@ TESTOBJS = test/test_main.o test/test_util.o test/test_status.o \
            test/test_render.o test/test_width.o test/test_key.o \
            test/test_nav.o test/test_irender.o test/test_input.o \
            test/test_fuzzy.o test/test_fuzzy_engine.o test/test_git_ops.o \
-           test/test_overlay.o test/test_proc.o test/test_gitnet.o
+           test/test_overlay.o test/test_proc.o test/test_gitnet.o \
+           test/test_e2e.o
 
 # Headers listed explicitly (same reason as the object lists). The per-object
 # rules near the end pin each object to all of them.
@@ -123,3 +124,4 @@ test/test_git_ops.o: test/test_git_ops.c $(HEADERS)
 test/test_overlay.o: test/test_overlay.c $(HEADERS)
 test/test_proc.o: test/test_proc.c $(HEADERS)
 test/test_gitnet.o: test/test_gitnet.c $(HEADERS)
+test/test_e2e.o: test/test_e2e.c $(HEADERS)
