@@ -23,6 +23,10 @@ void test_width_ascii(void);
 void test_width_wide(void);
 void test_width_combining(void);
 void test_utf8_decode(void);
+void test_key_arrows(void);
+void test_key_lone_esc(void);
+void test_key_controls(void);
+void test_key_printable(void);
 
 int main(void)
 {
@@ -45,6 +49,10 @@ int main(void)
 	RUN(test_width_wide);
 	RUN(test_width_combining);
 	RUN(test_utf8_decode);
+	RUN(test_key_arrows);
+	RUN(test_key_lone_esc);
+	RUN(test_key_controls);
+	RUN(test_key_printable);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);

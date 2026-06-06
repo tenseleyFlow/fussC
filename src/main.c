@@ -70,7 +70,7 @@ static int run_interactive(void)
 	printf("scaffold build - press any key to exit\r\n");
 	fflush(stdout);
 
-	term_read_byte();
+	term_read_key();
 	term_restore();
 	return 0;
 }

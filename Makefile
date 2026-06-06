@@ -11,7 +11,10 @@ BINDIR   = $(PREFIX)/bin
 OPT     ?= -O2
 DBG     ?=
 
-CSTD     = -std=c11 -D_POSIX_C_SOURCE=200809L
+# _DEFAULT_SOURCE exposes POSIX-2008 + BSD extensions (SIGWINCH, strcasecmp,
+# poll, clock_gettime, pthreads) on glibc; on macOS/FreeBSD we simply avoid
+# defining _POSIX_C_SOURCE, which would otherwise hide those BSD extensions.
+CSTD     = -std=c11 -D_DEFAULT_SOURCE
 WARN     = -Wall -Wextra -Werror
 CFLAGS   = $(CSTD) $(WARN) $(OPT) $(DBG) -Iinclude -Itest
 
@@ -33,7 +36,7 @@ OBJS     = src/main.o $(LIBOBJS)
 TESTBIN  = test/run
 TESTOBJS = test/test_main.o test/test_util.o test/test_status.o \
            test/test_tree.o test/test_flatten.o test/test_git.o \
-           test/test_render.o test/test_width.o
+           test/test_render.o test/test_width.o test/test_key.o
 
 .SUFFIXES: .c .o
 .c.o:
