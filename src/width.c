@@ -97,15 +97,17 @@ size_t display_width(const char *s)
 	return w;
 }
 
-char *clip_to_width(const char *in, int cols)
+char *clip_to_width_off(const char *in, int off, int width)
 {
 	strbuf out = {0};
-	int w = 0;
+	int w = 0; /* absolute display column of the next glyph */
 	bool truncated = false;
 	const char *p = in;
 
 	while (*p != '\0') {
-		if (*p == 0x1B) { /* ESC [ ... <final> : copy verbatim */
+		if (*p == 0x1B) { /* ESC [ ... <final>: always copy, so any
+			             color set in the scrolled-off prefix still
+			             applies to the visible part. */
 			sb_putc(&out, *p++);
 			if (*p == '[') {
 				sb_putc(&out, *p++);
@@ -119,16 +121,23 @@ char *clip_to_width(const char *in, int cols)
 		uint32_t cp;
 		int n = utf8_decode(p, &cp);
 		int cw = cp_width(cp);
-		if (w + cw > cols) {
-			truncated = true;
-			break;
+		if (w >= off) { /* inside the visible window */
+			if ((w - off) + cw > width) {
+				truncated = true;
+				break;
+			}
+			for (int i = 0; i < n; i++)
+				sb_putc(&out, p[i]);
 		}
-		for (int i = 0; i < n; i++)
-			sb_putc(&out, p[i]);
 		w += cw;
 		p += n;
 	}
 	if (truncated)
 		sb_put(&out, "\033[0m");
 	return out.buf ? out.buf : xstrdup("");
+}
+
+char *clip_to_width(const char *in, int cols)
+{
+	return clip_to_width_off(in, 0, cols);
 }

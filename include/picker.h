@@ -58,6 +58,7 @@ typedef struct {
 	 * enough, the body splits into list | preview. */
 	char *const *preview_lines;
 	int preview_count;
+	int preview_col; /* horizontal scroll offset (display columns) */
 } picker_view;
 
 /*

@@ -225,7 +225,8 @@ char **render_picker_frame(const picker_view *v, int rows, int cols, bool color)
 			                 : "\342\224\202");
 			const char *pl =
 			    (r < v->preview_count) ? v->preview_lines[r] : "";
-			char *pc = clip_to_width(pl ? pl : "", right_w);
+			char *pc = clip_to_width_off(pl ? pl : "",
+			                             v->preview_col, right_w);
 			sb_put(&s, pc);
 			free(pc);
 		}
@@ -240,6 +241,8 @@ char **render_picker_frame(const picker_view *v, int rows, int cols, bool color)
 			sb_put(&s, "\033[90m");
 		sb_put(&s, "\342\206\221\342\206\223 move  Enter select  "
 		           "Esc cancel");
+		if (split)
+			sb_put(&s, "  \342\206\220\342\206\222 scroll");
 		if (color)
 			sb_put(&s, "\033[0m");
 		set_line(lines, rows - 1, s.buf ? s.buf : "", cols);
@@ -306,6 +309,9 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 	int preview_item = -1;
 	char **pv = NULL;
 	int pv_count = 0;
+	int pv_maxw = 0;     /* widest preview line, for the scroll clamp */
+	int preview_col = 0; /* horizontal scroll offset */
+	const int HSTEP = 8; /* columns shifted per Left/Right press */
 
 	while (running) {
 		int cur_item = mcount > 0 ? matches[sel] : -1;
@@ -313,12 +319,21 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 			free_lines(pv, pv_count);
 			pv = NULL;
 			pv_count = 0;
+			pv_maxw = 0;
+			preview_col =
+			    0; /* new preview: back to the left edge */
 			if (cur_item >= 0) {
 				char *txt =
 				    spec->preview(spec->preview_ctx, cur_item);
 				if (txt) {
 					pv = split_lines(txt, &pv_count);
 					free(txt);
+					for (int i = 0; i < pv_count; i++) {
+						int w =
+						    (int)display_width(pv[i]);
+						if (w > pv_maxw)
+							pv_maxw = w;
+					}
 				}
 			}
 			preview_item = cur_item;
@@ -334,7 +349,8 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 		                 .sel = sel,
 		                 .query = query,
 		                 .preview_lines = pv,
-		                 .preview_count = pv_count};
+		                 .preview_count = pv_count,
+		                 .preview_col = preview_col};
 		char **frame = render_picker_frame(&v, rows, cols, color);
 		screen_present(s, frame, rows);
 
@@ -360,6 +376,16 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 		case KEY_CTRL('N'):
 			if (sel + 1 < mcount)
 				sel++;
+			break;
+		case KEY_LEFT:
+			preview_col -= HSTEP;
+			if (preview_col < 0)
+				preview_col = 0;
+			break;
+		case KEY_RIGHT:
+			/* Clamp so the widest line can't scroll fully off. */
+			if (preview_col + HSTEP < pv_maxw)
+				preview_col += HSTEP;
 			break;
 		case KEY_RESIZE:
 			break; /* loop redraws at the new size */

@@ -1,5 +1,6 @@
 #include "picker.h"
 #include "test.h"
+#include "width.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -155,6 +156,68 @@ void test_render_picker_frame_preview(void)
 			nosep = false;
 	CHECK(nosep);
 	free_frame(g, 10);
+}
+
+void test_render_picker_frame_preview_scroll(void)
+{
+	int matches[] = {0, 1, 2, 3, 4};
+	/* A preview line longer than the pane so scrolling has somewhere to go.
+	 */
+	char *const preview[] = {"0123456789abcdefghijklmnopqrstuvwxyz"};
+	picker_view v = {.title = "T",
+	                 .items = ITEMS,
+	                 .matches = matches,
+	                 .match_count = N,
+	                 .total = N,
+	                 .sel = 0,
+	                 .query = "",
+	                 .preview_lines = preview,
+	                 .preview_count = 1,
+	                 .preview_col = 0};
+
+	char **f0 = render_picker_frame(&v, 10, 80, false);
+	bool head_unscrolled = false;
+	for (int i = 2; i < 9; i++)
+		if (strstr(f0[i], "0123456789"))
+			head_unscrolled = true;
+	CHECK(head_unscrolled);
+	free_frame(f0, 10);
+
+	/* Scrolled right: the leading chars are gone, later ones are visible.
+	 */
+	v.preview_col = 10;
+	char **f1 = render_picker_frame(&v, 10, 80, false);
+	bool tail_visible = false, head_gone = true;
+	for (int i = 2; i < 9; i++) {
+		if (strstr(f1[i], "abcdefghij"))
+			tail_visible = true;
+		if (strstr(f1[i], "0123456789"))
+			head_gone = false;
+	}
+	CHECK(tail_visible);
+	CHECK(head_gone);
+	free_frame(f1, 10);
+}
+
+void test_clip_to_width_off(void)
+{
+	/* Skips display columns. Width reaches the end so there's no trailing
+	 * reset to worry about; the prefix "abc" is dropped. */
+	char *a = clip_to_width_off("abcdefgh", 3, 5);
+	CHECK_STR_EQ(a, "defgh");
+	free(a);
+
+	/* When it truncates mid-line it appends a styling reset. */
+	char *t = clip_to_width_off("abcdefgh", 3, 3);
+	CHECK(strstr(t, "def") != NULL);
+	free(t);
+
+	/* A color set before the window still applies to the visible part. */
+	char *b = clip_to_width_off("\033[31mREDTEXT", 3, 3);
+	CHECK(strstr(b, "\033[31m") != NULL); /* color preserved */
+	CHECK(strstr(b, "TEX") != NULL);      /* offset content */
+	CHECK(strstr(b, "RED") == NULL);      /* prefix glyphs dropped */
+	free(b);
 }
 
 void test_render_picker_frame_tiny(void)

@@ -29,4 +29,9 @@ size_t display_width(const char *s);
  * clipped colored line never bleeds into the next. */
 char *clip_to_width(const char *in, int cols);
 
+/* Like clip_to_width but first skips `off` display columns of glyphs (for
+ * horizontal scrolling). SGR escapes in the skipped prefix are still emitted,
+ * so the visible window keeps the color state it would have had. */
+char *clip_to_width_off(const char *in, int off, int width);
+
 #endif /* FUSSY_WIDTH_H */
