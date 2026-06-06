@@ -37,6 +37,9 @@ void test_render_frame_selection(void);
 void test_render_frame_filter_in_header(void);
 void test_frame_diff_minimal(void);
 void test_frame_diff_full_paint(void);
+void test_input_navigation(void);
+void test_input_case_is_mode(void);
+void test_input_editing_and_quit(void);
 
 int main(void)
 {
@@ -73,6 +76,9 @@ int main(void)
 	RUN(test_render_frame_filter_in_header);
 	RUN(test_frame_diff_minimal);
 	RUN(test_frame_diff_full_paint);
+	RUN(test_input_navigation);
+	RUN(test_input_case_is_mode);
+	RUN(test_input_editing_and_quit);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);

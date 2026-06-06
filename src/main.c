@@ -1,6 +1,8 @@
+#include "app.h"
 #include "flatten.h"
 #include "fussy.h"
 #include "git.h"
+#include "input.h"
 #include "render.h"
 #include "term.h"
 #include "tree.h"
@@ -55,23 +57,94 @@ static int run_print(bool all)
 	return 0;
 }
 
-/* Placeholder interactive screen. The real renderer and event loop arrive in
- * the navigation sprint; for now this proves clean terminal enter/exit. */
-static int run_interactive(void)
+static void apply_action(app *a, action act, bool *running)
 {
+	switch (act.kind) {
+	case ACT_QUIT:
+		*running = false;
+		break;
+	case ACT_UP:
+		app_up(a);
+		break;
+	case ACT_DOWN:
+		app_down(a);
+		break;
+	case ACT_LEFT:
+		app_left(a);
+		break;
+	case ACT_RIGHT:
+		app_right(a);
+		break;
+	case ACT_TOGGLE:
+		app_toggle(a);
+		break;
+	case ACT_HOME:
+		app_home(a);
+		break;
+	case ACT_END:
+		app_end(a);
+		break;
+	case ACT_FILTER_PUSH:
+		app_filter_push(a, act.cp); /* Sprint 3 triggers fuzzy here */
+		break;
+	case ACT_FILTER_BACKSPACE:
+		app_filter_backspace(a);
+		break;
+	case ACT_FILTER_CLEAR:
+		app_filter_clear(a);
+		break;
+	case ACT_TOGGLE_DOTFILES:
+		app_toggle_dotfiles(a);
+		break;
+	case ACT_COMMAND: /* git commands land in Sprint 4 */
+	case ACT_REDRAW:  /* the loop redraws every iteration */
+	case ACT_NONE:
+		break;
+	}
+}
+
+/* Interactive tree: build state from git, then loop on keys with an
+ * incrementally diffed redraw between each. */
+static int run_interactive(bool all)
+{
+	app a;
+	app_init(&a);
+
+	git_ctx g;
+	char err[256];
+	bool have_repo = git_open(&g, err, sizeof(err));
+	if (have_repo)
+		git_load_tree(&g, &a.t, all);
+	app_reflatten(&a);
+
+	const char *repo = have_repo ? g.repo_name : "(not a repo)";
+	const char *branch = have_repo ? g.branch : "";
+
 	if (!term_init()) {
-		fprintf(stderr, "%s: not a terminal (try --print)\n",
-		        FUSSY_NAME);
-		return 1;
+		/* stdout is a tty but stdin is not, or raw mode failed. */
+		render_tree(stdout, &a.t, &a.visible, false);
+		app_free(&a);
+		if (have_repo)
+			git_close(&g);
+		return 0;
 	}
 
-	printf("\033[2J\033[H"); /* clear + home */
-	printf("%s %s\r\n", FUSSY_NAME, FUSSY_VERSION);
-	printf("scaffold build - press any key to exit\r\n");
-	fflush(stdout);
+	bool color = getenv("NO_COLOR") == NULL;
+	screen s;
+	screen_init(&s);
 
-	term_read_key();
+	bool running = true;
+	while (running) {
+		screen_draw(&s, &a, repo, branch, color);
+		int key = term_read_key();
+		apply_action(&a, input_classify(key), &running);
+	}
+
+	screen_free(&s);
 	term_restore();
+	app_free(&a);
+	if (have_repo)
+		git_close(&g);
 	return 0;
 }
 
@@ -106,5 +179,5 @@ int main(int argc, char **argv)
 	if (want_print || !isatty(STDIN_FILENO))
 		return run_print(want_all);
 
-	return run_interactive();
+	return run_interactive(want_all);
 }
