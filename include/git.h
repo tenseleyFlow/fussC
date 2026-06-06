@@ -57,6 +57,11 @@ typedef struct {
 git_log_list git_log(git_ctx *g, int max);
 void git_log_free(git_log_list *l);
 
+/* HEAD's reflog as the same list shape (newest first, up to `max`): `lines[i]`
+ * is "<abbrev> HEAD@{i}: <message>", `shas[i]` the entry's resulting commit.
+ * Free with git_log_free. */
+git_log_list git_reflog_list(git_ctx *g, int max);
+
 /*
  * Local mutations, all libgit2 in-process so the index is touched by ONE
  * mechanism (fixing fussr's libgit2/subprocess split). Each returns 0 on

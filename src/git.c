@@ -727,3 +727,50 @@ void git_log_free(git_log_list *l)
 	l->shas = NULL;
 	l->count = 0;
 }
+
+git_log_list git_reflog_list(git_ctx *g, int max)
+{
+	git_log_list out = {0};
+
+	git_reflog *rl = NULL;
+	if (git_reflog_read(&rl, g->repo, "HEAD") != 0)
+		return out;
+
+	size_t total = git_reflog_entrycount(rl);
+	int cap = 0;
+	for (size_t i = 0; i < total; i++) {
+		if (max > 0 && out.count >= max)
+			break;
+		const git_reflog_entry *e = git_reflog_entry_byindex(rl, i);
+		if (e == NULL)
+			continue;
+		const git_oid *oid = git_reflog_entry_id_new(e);
+		const char *msg = git_reflog_entry_message(e);
+		if (msg == NULL)
+			msg = "";
+
+		char abbrev[8];
+		git_oid_tostr(abbrev, sizeof(abbrev), oid);
+		char full[GIT_OID_HEXSZ + 1];
+		git_oid_tostr(full, sizeof(full), oid);
+
+		if (out.count == cap) {
+			cap = cap ? cap * 2 : 256;
+			out.lines = xrealloc(out.lines,
+			                     (size_t)cap * sizeof(*out.lines));
+			out.shas =
+			    xrealloc(out.shas, (size_t)cap * sizeof(*out.shas));
+		}
+		int len =
+		    snprintf(NULL, 0, "%s HEAD@{%zu}: %s", abbrev, i, msg);
+		char *line = xmalloc((size_t)len + 1);
+		snprintf(line, (size_t)len + 1, "%s HEAD@{%zu}: %s", abbrev, i,
+		         msg);
+		out.lines[out.count] = line;
+		out.shas[out.count] = xstrdup(full);
+		out.count++;
+	}
+
+	git_reflog_free(rl);
+	return out;
+}

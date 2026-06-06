@@ -48,8 +48,9 @@ R rename       T tag            V view      G status
 P push         L pull           F fetch     B log
 ```
 
-`B` opens the commit-history browser: a fuzzy list of commits with a `git show`
-preview pane; type to filter, Enter opens the chosen commit in `$PAGER`.
+`B` opens the browse menu (Commits, Reflog, ...): pick one for a fuzzy list with a
+`git show` preview pane. Type to filter, `Left`/`Right` scroll the preview, Enter
+opens the selection in the built-in pager.
 
 `C`/`M` open a commit-message box (Enter commits, Esc cancels); `X`/`D` ask to confirm (y/n).
 `T` takes a tag name then an optional message (empty = lightweight, otherwise annotated).

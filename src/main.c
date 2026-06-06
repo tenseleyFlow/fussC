@@ -309,18 +309,17 @@ static void show_commit(loopctx *L, const char *sha)
 	free(out);
 }
 
-/* Commit-history browser: a picker over the revwalk with a `git show` preview;
- * Enter opens the chosen commit in paige. */
-static void browse_commits(loopctx *L)
+/* Drive a commit-list picker (commits or reflog): `git show` preview, Enter
+ * opens the selection in paige. Takes ownership of `log`. */
+static void browse_history(loopctx *L, const char *title, git_log_list log)
 {
-	git_log_list log = git_log(L->g, 5000);
 	if (log.count == 0) {
-		set_status(L->a, "no commits");
+		set_status(L->a, "nothing to browse");
 		git_log_free(&log);
 		return;
 	}
 	struct commit_preview_ctx pc = {.log = &log, .color = L->color};
-	picker_spec sp = {.title = "Commits  (Enter: show)",
+	picker_spec sp = {.title = title,
 	                  .items = log.lines,
 	                  .count = log.count,
 	                  .preview = commit_preview,
@@ -329,6 +328,37 @@ static void browse_commits(loopctx *L)
 	if (chosen >= 0)
 		show_commit(L, log.shas[chosen]);
 	git_log_free(&log);
+}
+
+static void browse_commits(loopctx *L)
+{
+	browse_history(L, "Commits  (Enter: show)", git_log(L->g, 5000));
+}
+
+static void browse_reflog(loopctx *L)
+{
+	browse_history(L, "Reflog  (Enter: show)", git_reflog_list(L->g, 5000));
+}
+
+/* The browse menu: a picker over the available browsers (itself reusing the
+ * widget). Scales as browsers are added without spending a key on each. */
+static void browse_menu(loopctx *L)
+{
+	char *items[] = {"Commits", "Reflog"};
+	picker_spec sp = {.title = "Browse",
+	                  .items = items,
+	                  .count = (int)(sizeof(items) / sizeof(*items))};
+	int choice = picker_run(L->s, &sp, L->color);
+	switch (choice) {
+	case 0:
+		browse_commits(L);
+		break;
+	case 1:
+		browse_reflog(L);
+		break;
+	default:
+		break; /* cancelled */
+	}
 }
 
 /* UPPERCASE command from the main view: immediate ops run now; the rest open a
@@ -385,8 +415,8 @@ static void run_command(loopctx *L, uint32_t letter)
 	           */
 		run_viewer(L, "git -c color.status=always --paginate status");
 		break;
-	case 'B': /* commit-history browser */
-		browse_commits(L);
+	case 'B': /* browse menu (commits, reflog, ...) */
+		browse_menu(L);
 		break;
 	case 'V': /* view: diff a changed file, else its contents */
 		if (p) {

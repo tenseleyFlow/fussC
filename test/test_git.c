@@ -238,6 +238,46 @@ void test_git_log(void)
 	cleanup(dir);
 }
 
+void test_git_reflog(void)
+{
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_reflog (no git CLI)\n");
+		return;
+	}
+
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "gitrl");
+
+	char cmd[2300];
+	snprintf(cmd, sizeof(cmd),
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && git init -q && "
+	         "git config user.email t@t && git config user.name t && "
+	         "printf 1 > f && git add f && git commit -qm first && "
+	         "printf 2 > f && git commit -qam second",
+	         dir, dir, dir);
+	CHECK(system(cmd) == 0);
+
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(dir) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err, sizeof(err))) {
+		git_log_list rl = git_reflog_list(&g, 0);
+		CHECK(rl.count >= 2); /* two commits -> two reflog entries */
+		if (rl.count >= 1) {
+			CHECK(strstr(rl.lines[0], "HEAD@{0}") != NULL);
+			CHECK(strlen(rl.shas[0]) == 40);
+		}
+		git_log_free(&rl);
+		git_close(&g);
+	}
+
+	CHECK(chdir(cwd) == 0);
+	cleanup(dir);
+}
+
 void test_git_not_a_repo(void)
 {
 	char dir[256];
