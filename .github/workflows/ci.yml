@@ -66,13 +66,15 @@ jobs:
             make test
 
   format:
-    name: clang-format (advisory)
+    name: clang-format
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+      # Pin the major version so local (clang-format19) and CI never disagree.
+      - name: Install clang-format-19
+        run: sudo apt-get update && sudo apt-get install -y clang-format-19
       - name: Check formatting
         run: |
-          clang-format --version
+          clang-format-19 --version
           files=$(find src include test -type f \( -name '*.c' -o -name '*.h' \))
-          clang-format --dry-run --Werror $files
+          clang-format-19 --dry-run --Werror $files
