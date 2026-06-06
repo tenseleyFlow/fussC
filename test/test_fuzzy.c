@@ -62,6 +62,53 @@ void test_fuzzy_best_match(void)
 	tree_free(&t);
 }
 
+/* A path-fallback match must clear SCORE_PATH_MIN: a compact path query wins,
+ * but a subsequence scattered across directory names does not. */
+void test_fuzzy_path_floor(void)
+{
+	/* Reported case: "fll" is a subsequence of the workflow path but
+	 * matches no filename; it must score below the floor. */
+	CHECK(fuzzy_score("fll", ".github/workflows/ci.yml") < SCORE_PATH_MIN);
+	/* A real path query stays well above the floor. */
+	CHECK(fuzzy_score("srcmain", "src/main.c") >= SCORE_PATH_MIN);
+	/* No filename contains two l's, so the basename pass finds nothing. */
+	CHECK(fuzzy_score("fll", "flatten.c") == SCORE_NONE);
+}
+
+/* Expected jump targets for representative queries (regression guard). */
+void test_fuzzy_expected_matches(void)
+{
+	tree t;
+	tree_init(&t);
+	tree_add(&t, "src/flatten.c", 0);
+	tree_add(&t, "include/flatten.h", 0);
+	tree_add(&t, "test/test_flatten.c", 0);
+	tree_add(&t, "src/main.c", 0);
+	tree_add(&t, ".github/workflows/ci.yml", 0);
+
+	/* Basename prefix lands on a flatten file. */
+	uint32_t m = fuzzy_best_match(&t, "fl");
+	CHECK(m != NODE_NIL && strstr(t.nodes[m].name, "flatten") != NULL);
+	m = fuzzy_best_match(&t, "flat");
+	CHECK(m != NODE_NIL && strstr(t.nodes[m].name, "flatten") != NULL);
+
+	/* The reported surprise: "fll" matches no filename and must NOT jump to
+	 * the workflow path. */
+	CHECK(fuzzy_best_match(&t, "fll") == NODE_NIL);
+
+	/* Compact path typing still works. */
+	m = fuzzy_best_match(&t, "srcmain");
+	CHECK(m != NODE_NIL);
+	CHECK_STR_EQ(t.nodes[m].name, "main.c");
+
+	/* Typing the actual workflow name still finds it. */
+	m = fuzzy_best_match(&t, "ci.yml");
+	CHECK(m != NODE_NIL);
+	CHECK_STR_EQ(t.nodes[m].name, "ci.yml");
+
+	tree_free(&t);
+}
+
 /* The headline fix: jump into a collapsed subtree by auto-expanding the path.
  */
 void test_fuzzy_auto_expand(void)

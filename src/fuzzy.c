@@ -91,10 +91,12 @@ uint32_t fuzzy_best_match(const tree *t, const char *query)
 	if (best >= SCORE_PREFIX)
 		return best_idx; /* strong basename hit wins outright */
 
-	/* Pass 2: full paths. */
+	/* Pass 2: full paths, but only matches that clear SCORE_PATH_MIN, so a
+	 * stray cross-directory subsequence (e.g. "fll" inside
+	 * ".github/workflows/ci.yml") cannot win when no filename matches. */
 	for (uint32_t i = 1; i < t->len; i++) {
 		int s = fuzzy_score(pat, t->nodes[i].path_lower);
-		if (s > best) {
+		if (s >= SCORE_PATH_MIN && s > best) {
 			best = s;
 			best_idx = i;
 		}

@@ -19,6 +19,10 @@ enum {
 	SCORE_NONE = 0,
 	SCORE_EXACT = 10000,
 	SCORE_PREFIX = 5000,
+	/* Quality floor a full-path (cross-directory) fallback match must clear
+	 * to win, so a stray subsequence scattered across directory names does
+	 * not yank the selection away when no filename actually matches. */
+	SCORE_PATH_MIN = 500,
 	FZ_CHAR = 100,     /* per matched character */
 	FZ_CONSEC = 50,    /* escalating consecutive-run bonus */
 	FZ_START = 200,    /* match at index 0 */
