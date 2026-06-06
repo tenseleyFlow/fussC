@@ -27,6 +27,11 @@ void test_key_arrows(void);
 void test_key_lone_esc(void);
 void test_key_controls(void);
 void test_key_printable(void);
+void test_nav_updown(void);
+void test_nav_right_left(void);
+void test_nav_dotfiles(void);
+void test_toggle_matches_oracle(void);
+void test_nav_filter_buffer(void);
 
 int main(void)
 {
@@ -53,6 +58,11 @@ int main(void)
 	RUN(test_key_lone_esc);
 	RUN(test_key_controls);
 	RUN(test_key_printable);
+	RUN(test_nav_updown);
+	RUN(test_nav_right_left);
+	RUN(test_nav_dotfiles);
+	RUN(test_toggle_matches_oracle);
+	RUN(test_nav_filter_buffer);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);

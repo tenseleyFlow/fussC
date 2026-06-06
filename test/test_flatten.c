@@ -25,7 +25,7 @@ void test_flatten_expanded(void)
 
 	flat_list f;
 	flat_init(&f);
-	flatten(&f, &t);
+	flatten(&f, &t, false);
 
 	/* All dirs expanded: a, b, c, d, e in pre-order with depths. */
 	CHECK(f.len == 5);
@@ -54,7 +54,7 @@ void test_flatten_collapsed(void)
 
 	flat_list f;
 	flat_init(&f);
-	flatten(&f, &t);
+	flatten(&f, &t, false);
 
 	CHECK(f.len == 3);
 	CHECK(row_is(&f, &t, 0, "a", 0));
@@ -63,7 +63,7 @@ void test_flatten_collapsed(void)
 
 	/* Re-expanding restores them; flatten is a pure rebuild. */
 	t.nodes[b].flags |= NF_EXPANDED;
-	flatten(&f, &t);
+	flatten(&f, &t, false);
 	CHECK(f.len == 5);
 
 	flat_free(&f);
@@ -77,7 +77,7 @@ void test_flatten_empty(void)
 
 	flat_list f;
 	flat_init(&f);
-	flatten(&f, &t);
+	flatten(&f, &t, false);
 	CHECK(f.len == 0);
 
 	flat_free(&f);

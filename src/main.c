@@ -44,7 +44,7 @@ static int run_print(bool all)
 
 	flat_list f;
 	flat_init(&f);
-	flatten(&f, &t);
+	flatten(&f, &t, false);
 
 	bool color = isatty(STDOUT_FILENO) && getenv("NO_COLOR") == NULL;
 	render_tree(stdout, &t, &f, color);

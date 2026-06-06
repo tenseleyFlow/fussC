@@ -1,6 +1,7 @@
 #ifndef FUSSY_FLATTEN_H
 #define FUSSY_FLATTEN_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "tree.h"
@@ -29,8 +30,17 @@ void flat_free(flat_list *f);
 /*
  * Rebuild the visible list: pre-order DFS over the tree, descending into a
  * directory only when it is expanded. The synthetic root is not emitted; its
- * children are depth 0.
+ * children are depth 0. When `hide_dot` is true, names beginning with '.' (and
+ * their subtrees) are skipped.
  */
-void flatten(flat_list *f, const tree *t);
+void flatten(flat_list *f, const tree *t, bool hide_dot);
+
+/*
+ * Expand or collapse the directory at visible row `row`, updating both the
+ * node's flag and the list in place by splicing the affected run (no full
+ * rebuild). No-op if the row is not a directory. `hide_dot` matches the value
+ * passed to flatten so expanded children stay consistent.
+ */
+void flat_toggle(flat_list *f, tree *t, uint32_t row, bool hide_dot);
 
 #endif /* FUSSY_FLATTEN_H */

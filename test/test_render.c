@@ -18,7 +18,7 @@ void test_render_golden(void)
 
 	flat_list f;
 	flat_init(&f);
-	flatten(&f, &t);
+	flatten(&f, &t, false);
 
 	char *out = render_tree_string(&t, &f, false);
 	const char *want =
@@ -46,7 +46,7 @@ void test_render_pipe_gutter(void)
 
 	flat_list f;
 	flat_init(&f);
-	flatten(&f, &t);
+	flatten(&f, &t, false);
 
 	char *out = render_tree_string(&t, &f, false);
 	const char *want =
@@ -71,7 +71,7 @@ void test_render_color(void)
 
 	flat_list f;
 	flat_init(&f);
-	flatten(&f, &t);
+	flatten(&f, &t, false);
 
 	char *out = render_tree_string(&t, &f, true);
 	/* Green for staged, dim wrap for the ignored name. */
