@@ -39,10 +39,15 @@ Git commands are UPPERCASE (lowercase is the filter):
 ```
 A stage        S stage-all      C commit    M amend
 U unstage      Z unstage-all    X discard   D delete
-R rename       T tag
+R rename       T tag            V view      G status
+P push         L pull           F fetch
 ```
 
 `C`/`M` open a commit-message box (Enter commits, Esc cancels); `X`/`D` ask to confirm (y/n).
+`T` takes a tag name then an optional message (empty = lightweight, otherwise annotated).
+`V` shows the selected file's diff (or its contents if unchanged) and `G` the full status, both in
+`$PAGER`. `P`/`L`/`F` are push/pull/fetch via `git`; with more than one remote and no upstream set,
+a picker appears. Push uses `--follow-tags`, so annotated tags ship with the branch.
 
 ## Portability
 
