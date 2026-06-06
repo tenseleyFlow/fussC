@@ -14,32 +14,39 @@ DBG     ?=
 CSTD     = -std=c11 -D_POSIX_C_SOURCE=200809L
 WARN     = -Wall -Wextra -Werror
 CFLAGS   = $(CSTD) $(WARN) $(OPT) $(DBG) -Iinclude -Itest
+
+# libgit2 flags are resolved by the shell at recipe time (backticks), which both
+# BSD make and GNU make pass through verbatim - unlike $(shell ...)/!= which are
+# flavor-specific. Override GIT2_CFLAGS/GIT2_LIBS to bypass pkg-config.
+GIT2_CFLAGS ?= `pkg-config --cflags libgit2`
+GIT2_LIBS   ?= `pkg-config --libs libgit2`
+
 LDLIBS   = -lpthread
 
 BIN      = fussy
 
 # Object lists are explicit (no wildcard) so BSD make and GNU make agree.
-LIBOBJS  = src/term.o src/util.o src/tree.o src/flatten.o
+LIBOBJS  = src/term.o src/util.o src/tree.o src/flatten.o src/git.o
 OBJS     = src/main.o $(LIBOBJS)
 
 TESTBIN  = test/run
 TESTOBJS = test/test_main.o test/test_util.o test/test_status.o \
-           test/test_tree.o test/test_flatten.o
+           test/test_tree.o test/test_flatten.o test/test_git.o
 
 .SUFFIXES: .c .o
 .c.o:
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(GIT2_CFLAGS) -c $< -o $@
 
 all: $(BIN)
 
 $(BIN): $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(GIT2_LIBS) $(LDLIBS)
 
 test: $(TESTBIN)
 	./$(TESTBIN)
 
 $(TESTBIN): $(TESTOBJS) $(LIBOBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TESTOBJS) $(LIBOBJS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TESTOBJS) $(LIBOBJS) $(GIT2_LIBS) $(LDLIBS)
 
 clean:
 	rm -f $(BIN) $(OBJS) $(TESTBIN) $(TESTOBJS)

@@ -14,6 +14,8 @@ void test_tree_case_order(void);
 void test_flatten_expanded(void);
 void test_flatten_collapsed(void);
 void test_flatten_empty(void);
+void test_git_status(void);
+void test_git_not_a_repo(void);
 
 int main(void)
 {
@@ -27,6 +29,8 @@ int main(void)
 	RUN(test_flatten_expanded);
 	RUN(test_flatten_collapsed);
 	RUN(test_flatten_empty);
+	RUN(test_git_status);
+	RUN(test_git_not_a_repo);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);
