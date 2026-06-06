@@ -41,6 +41,23 @@ int git_load_tree(git_ctx *g, tree *t, bool all);
 void git_mark_incoming(git_ctx *g, tree *t);
 
 /*
+ * A commit listing for the history browser. `lines[i]` is a display string
+ * ("<abbrev>  <summary>"); `shas[i]` is the matching full hex SHA. Both arrays
+ * have `count` entries. Built with a libgit2 revwalk - no subprocess, no
+ * parsing.
+ */
+typedef struct {
+	char **lines;
+	char **shas;
+	int count;
+} git_log_list;
+
+/* Walk from HEAD newest-first, up to `max` commits (0 = no cap). Returns an
+ * empty list on an unborn/empty repo. Free with git_log_free. */
+git_log_list git_log(git_ctx *g, int max);
+void git_log_free(git_log_list *l);
+
+/*
  * Local mutations, all libgit2 in-process so the index is touched by ONE
  * mechanism (fixing fussr's libgit2/subprocess split). Each returns 0 on
  * success or -1 with a terse message in errbuf. Paths are repo-relative.

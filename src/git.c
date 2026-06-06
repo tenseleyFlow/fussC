@@ -657,3 +657,73 @@ void git_mark_incoming(git_ctx *g, tree *t)
 	git_tree_free(ht);
 	git_tree_free(ut);
 }
+
+/* ---- history (revwalk) --------------------------------------------------- */
+
+git_log_list git_log(git_ctx *g, int max)
+{
+	git_log_list out = {0};
+
+	git_revwalk *w = NULL;
+	if (git_revwalk_new(&w, g->repo) != 0)
+		return out;
+	/* Topological first so a commit always precedes its parents (stable
+	 * even when commits share a timestamp), then by time to order across
+	 * branches. */
+	git_revwalk_sorting(w, GIT_SORT_TOPOLOGICAL | GIT_SORT_TIME);
+	if (git_revwalk_push_head(w) != 0) { /* unborn / empty repo */
+		git_revwalk_free(w);
+		return out;
+	}
+
+	int cap = 0;
+	git_oid oid;
+	while (git_revwalk_next(&oid, w) == 0) {
+		if (max > 0 && out.count >= max)
+			break;
+
+		git_commit *c = NULL;
+		if (git_commit_lookup(&c, g->repo, &oid) != 0)
+			continue;
+		const char *summary = git_commit_summary(c);
+		if (summary == NULL)
+			summary = "";
+
+		char abbrev[8]; /* 7 hex + NUL */
+		git_oid_tostr(abbrev, sizeof(abbrev), &oid);
+		char full[GIT_OID_HEXSZ + 1];
+		git_oid_tostr(full, sizeof(full), &oid);
+
+		if (out.count == cap) {
+			cap = cap ? cap * 2 : 256;
+			out.lines = xrealloc(out.lines,
+			                     (size_t)cap * sizeof(*out.lines));
+			out.shas =
+			    xrealloc(out.shas, (size_t)cap * sizeof(*out.shas));
+		}
+		size_t n = strlen(abbrev) + 2 + strlen(summary) + 1;
+		char *line = xmalloc(n);
+		snprintf(line, n, "%s  %s", abbrev, summary);
+		out.lines[out.count] = line;
+		out.shas[out.count] = xstrdup(full);
+		out.count++;
+
+		git_commit_free(c);
+	}
+
+	git_revwalk_free(w);
+	return out;
+}
+
+void git_log_free(git_log_list *l)
+{
+	for (int i = 0; i < l->count; i++) {
+		free(l->lines[i]);
+		free(l->shas[i]);
+	}
+	free(l->lines);
+	free(l->shas);
+	l->lines = NULL;
+	l->shas = NULL;
+	l->count = 0;
+}

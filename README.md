@@ -42,8 +42,11 @@ Git commands are UPPERCASE (lowercase is the filter):
 A stage        S stage-all      C commit    M amend
 U unstage      Z unstage-all    X discard   D delete
 R rename       T tag            V view      G status
-P push         L pull           F fetch
+P push         L pull           F fetch     B log
 ```
+
+`B` opens the commit-history browser: a fuzzy list of commits with a `git show`
+preview pane; type to filter, Enter opens the chosen commit in `$PAGER`.
 
 `C`/`M` open a commit-message box (Enter commits, Esc cancels); `X`/`D` ask to confirm (y/n).
 `T` takes a tag name then an optional message (empty = lightweight, otherwise annotated).

@@ -4,6 +4,8 @@
 #include "fuzzy.h"
 #include "git.h"
 #include "input.h"
+#include "picker.h"
+#include "proc.h"
 #include "render.h"
 #include "term.h"
 #include "tree.h"
@@ -233,6 +235,56 @@ static void run_viewer(loopctx *L, const char *cmd)
 	screen_invalidate(L->s);
 }
 
+/* Preview for the commit browser: `git show` for the selected commit. ctx is a
+ * commit_preview_ctx*; the returned heap string is freed by the picker. */
+struct commit_preview_ctx {
+	git_log_list *log;
+	bool color;
+};
+
+static char *commit_preview(void *vctx, int item)
+{
+	struct commit_preview_ctx *c = vctx;
+	char *cflag = c->color ? "--color=always" : "--color=never";
+	char *argv[] = {
+	    "git", "show", cflag, "--stat", "-p", c->log->shas[item], NULL};
+	char *out = NULL, *err = NULL;
+	int rc = proc_run(argv, &out, &err);
+	free(err);
+	if (rc != 0 || out == NULL) {
+		free(out);
+		return xstrdup("(preview unavailable)");
+	}
+	return out;
+}
+
+/* Commit-history browser: a picker over the revwalk with a `git show` preview;
+ * Enter opens the chosen commit in the pager. */
+static void browse_commits(loopctx *L)
+{
+	git_log_list log = git_log(L->g, 5000);
+	if (log.count == 0) {
+		set_status(L->a, "no commits");
+		git_log_free(&log);
+		return;
+	}
+	struct commit_preview_ctx pc = {.log = &log, .color = L->color};
+	picker_spec sp = {.title = "Commits  (Enter: show)",
+	                  .items = log.lines,
+	                  .count = log.count,
+	                  .preview = commit_preview,
+	                  .preview_ctx = &pc};
+	int chosen = picker_run(L->s, &sp, L->color);
+	if (chosen >= 0) {
+		char q[64], cmd[200];
+		shquote(log.shas[chosen], q, sizeof(q));
+		snprintf(cmd, sizeof(cmd),
+		         "git show --color=always %s | ${PAGER:-less -R}", q);
+		run_viewer(L, cmd);
+	}
+	git_log_free(&log);
+}
+
 /* UPPERCASE command from the main view: immediate ops run now; the rest open a
  * modal overlay that executes on confirm. */
 static void run_command(loopctx *L, uint32_t letter)
@@ -286,6 +338,9 @@ static void run_command(loopctx *L, uint32_t letter)
 	case 'G': /* full status in the pager */
 		run_viewer(L, "git -c color.status=always status | "
 		              "${PAGER:-less -R}");
+		break;
+	case 'B': /* commit-history browser */
+		browse_commits(L);
 		break;
 	case 'V': /* view: diff a changed file, else its contents */
 		if (p) {

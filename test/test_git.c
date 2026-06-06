@@ -189,6 +189,55 @@ void test_git_incoming(void)
 	cleanup(dir);
 }
 
+void test_git_log(void)
+{
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_log (no git CLI)\n");
+		return;
+	}
+
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "gitlog");
+
+	char cmd[2300];
+	snprintf(cmd, sizeof(cmd),
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && git init -q && "
+	         "git config user.email t@t && git config user.name t && "
+	         "printf 1 > f && git add f && git commit -qm first && "
+	         "printf 2 > f && git commit -qam second && "
+	         "printf 3 > f && git commit -qam third",
+	         dir, dir, dir);
+	CHECK(system(cmd) == 0);
+
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(dir) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err, sizeof(err))) {
+		git_log_list log = git_log(&g, 0);
+		CHECK(log.count == 3);
+		if (log.count == 3) {
+			/* newest first; lines carry the summary, shas are full.
+			 */
+			CHECK(strstr(log.lines[0], "third") != NULL);
+			CHECK(strstr(log.lines[2], "first") != NULL);
+			CHECK(strlen(log.shas[0]) == 40);
+		}
+		/* max caps the walk. */
+		git_log_free(&log);
+		git_log_list two = git_log(&g, 2);
+		CHECK(two.count == 2);
+		git_log_free(&two);
+
+		git_close(&g);
+	}
+
+	CHECK(chdir(cwd) == 0);
+	cleanup(dir);
+}
+
 void test_git_not_a_repo(void)
 {
 	char dir[256];
