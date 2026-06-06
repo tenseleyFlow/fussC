@@ -1,4 +1,6 @@
 # fussy
+(noun): fussy
+
 
 A git-staging tree TUI written in C. Type a filename to jump to it in the tree, then stage, commit,
 and sync without leaving the keyboard. A C port of `fuss` (Fortran) and `fussr` (Rust), built for speed.
