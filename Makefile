@@ -89,7 +89,9 @@ $(TESTBIN): $(TESTOBJS) $(LIBOBJS)
 FUZZ_CC    ?= clang
 FUZZ_FLAGS  = -std=c11 -D_DEFAULT_SOURCE -g -O1 \
               -fsanitize=fuzzer,address,undefined -Iinclude $(GIT2_CFLAGS)
-SCORE_SRC   = fuzz/fuzz_score.c src/fuzzy.c src/tree.c src/util.c src/width.c
+# width.c pulls in clip_to_width -> strbuf, so the scorer fuzzer links strbuf.c.
+SCORE_SRC   = fuzz/fuzz_score.c src/fuzzy.c src/tree.c src/util.c src/width.c \
+              src/strbuf.c
 PATH_SRC    = fuzz/fuzz_path.c src/tree.c src/util.c
 KEY_SRC     = fuzz/fuzz_key.c src/term.c
 FUZZERS     = fuzz/fuzz_score fuzz/fuzz_path fuzz/fuzz_key
