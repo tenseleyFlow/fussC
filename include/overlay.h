@@ -22,6 +22,8 @@ typedef enum {
 	OV_CONFIRM, /* y/n confirmation */
 } overlay_kind;
 
+enum { CONF_DISCARD, CONF_DELETE };
+
 typedef struct {
 	overlay_kind kind;
 	char title[48];              /* box title / confirm prompt */
@@ -29,6 +31,11 @@ typedef struct {
 	size_t len;                  /* byte length of text */
 	size_t cursor;               /* byte cursor, on a codepoint boundary */
 	bool amend; /* OV_COMMIT: amend rather than new commit */
+
+	/* The path being acted on (OV_RENAME: old path; OV_CONFIRM: target). */
+	char target[1024];
+	bool target_untracked; /* OV_CONFIRM: target is untracked */
+	int confirm_op;        /* OV_CONFIRM: CONF_DISCARD or CONF_DELETE */
 } overlay;
 
 static inline bool overlay_active(const overlay *o)

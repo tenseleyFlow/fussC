@@ -12,6 +12,9 @@ void overlay_close(overlay *o)
 	o->len = 0;
 	o->cursor = 0;
 	o->amend = false;
+	o->target[0] = '\0';
+	o->target_untracked = false;
+	o->confirm_op = CONF_DISCARD;
 }
 
 static void set_title(overlay *o, const char *t)
@@ -55,6 +58,9 @@ void overlay_open_rename(overlay *o, const char *current)
 	o->amend = false;
 	set_text(o, current);
 	set_title(o, "Rename to");
+	/* Remember the old path; the edited text becomes the new path. */
+	strncpy(o->target, current ? current : "", sizeof(o->target) - 1);
+	o->target[sizeof(o->target) - 1] = '\0';
 }
 
 void overlay_open_confirm(overlay *o, const char *prompt)

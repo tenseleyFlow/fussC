@@ -177,6 +177,15 @@ static char *build_header(const char *repo, const char *branch, const app *a,
 static char *build_footer(const app *a, bool color)
 {
 	strbuf s = {0};
+	/* A pending status message (git op result) takes over the footer. */
+	if (a->status[0] != '\0') {
+		if (color)
+			sb_put(&s, "\033[33m");
+		sb_put(&s, a->status);
+		if (color)
+			sb_put(&s, "\033[0m");
+		return s.buf ? s.buf : xstrdup("");
+	}
 	if (color)
 		sb_put(&s, "\033[90m");
 	sb_put(&s, "type:");
