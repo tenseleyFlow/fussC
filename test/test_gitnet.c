@@ -72,6 +72,14 @@ void test_gitnet_push_fetch_pull(void)
 		    system("git --git-dir='../remote.git' log --all --oneline "
 		           "2>/dev/null | grep -q second") == 0);
 
+		/* An annotated tag rides along on the next push
+		 * (--follow-tags). */
+		CHECK(gitop_tag(&g, "v1", "release one", err, sizeof(err)) ==
+		      0);
+		CHECK(gitnet_push(&g, NULL, msg, sizeof(msg)) == 0);
+		CHECK(system("git --git-dir='../remote.git' tag -l 2>/dev/null "
+		             "| grep -q v1") == 0);
+
 		/* Fetch and pull are up to date (exit 0). */
 		CHECK(gitnet_fetch(&g, NULL, msg, sizeof(msg)) == 0);
 		CHECK(gitnet_pull(&g, NULL, msg, sizeof(msg)) == 0);

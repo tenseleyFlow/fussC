@@ -569,12 +569,16 @@ static int run_git(char *const argv[], const char *ok, char *msg, size_t msglen)
 
 int gitnet_push(git_ctx *g, const char *remote, char *msg, size_t msglen)
 {
+	/* --follow-tags carries annotated tags reachable from the branch, so a
+	 * tag made via T ships with the next push - no separate "push tag" key.
+	 */
 	if (remote != NULL) { /* first push: set the upstream */
-		char *argv[] = {"git",          "push",    "-u",
-		                (char *)remote, g->branch, NULL};
+		char *argv[] = {"git", "push",         "--follow-tags",
+		                "-u",  (char *)remote, g->branch,
+		                NULL};
 		return run_git(argv, "pushed", msg, msglen);
 	}
-	char *argv[] = {"git", "push", NULL};
+	char *argv[] = {"git", "push", "--follow-tags", NULL};
 	return run_git(argv, "pushed", msg, msglen);
 }
 
