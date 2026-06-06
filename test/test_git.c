@@ -278,6 +278,58 @@ void test_git_reflog(void)
 	cleanup(dir);
 }
 
+void test_git_branches(void)
+{
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_branches (no git CLI)\n");
+		return;
+	}
+
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "gitbr");
+
+	char cmd[2300];
+	snprintf(cmd, sizeof(cmd),
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && "
+	         "git -c init.defaultBranch=master init -q && "
+	         "git config user.email t@t && git config user.name t && "
+	         "printf 1 > f && git add f && git commit -qm first && "
+	         "git branch feature",
+	         dir, dir, dir);
+	CHECK(system(cmd) == 0);
+
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(dir) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err, sizeof(err))) {
+		git_branchlist bl = git_branches(&g);
+		CHECK(bl.count == 2);
+		bool current = false, feature = false;
+		for (int i = 0; i < bl.count; i++) {
+			if (bl.display[i][0] == '*')
+				current = true; /* HEAD marked */
+			if (strcmp(bl.names[i], "feature") == 0)
+				feature = true;
+		}
+		CHECK(current);
+		CHECK(feature);
+		git_branchlist_free(&bl);
+
+		/* Switch to feature; HEAD follows. */
+		CHECK(gitop_checkout(&g, "feature", err, sizeof(err)) == 0);
+		git_reload_head(&g);
+		CHECK_STR_EQ(g.branch, "feature");
+
+		git_close(&g);
+	}
+
+	CHECK(chdir(cwd) == 0);
+	cleanup(dir);
+}
+
 void test_git_not_a_repo(void)
 {
 	char dir[256];

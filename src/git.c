@@ -774,3 +774,97 @@ git_log_list git_reflog_list(git_ctx *g, int max)
 	git_reflog_free(rl);
 	return out;
 }
+
+/* ---- branches ------------------------------------------------------------ */
+
+git_branchlist git_branches(git_ctx *g)
+{
+	git_branchlist out = {0};
+
+	git_branch_iterator *it = NULL;
+	if (git_branch_iterator_new(&it, g->repo, GIT_BRANCH_LOCAL) != 0)
+		return out;
+
+	int cap = 0;
+	git_reference *ref = NULL;
+	git_branch_t type;
+	while (git_branch_next(&ref, &type, it) == 0) {
+		const char *name = NULL;
+		if (git_branch_name(&name, ref) == 0 && name != NULL) {
+			bool head = git_branch_is_head(ref) == 1;
+			if (out.count == cap) {
+				cap = cap ? cap * 2 : 16;
+				out.display = xrealloc(
+				    out.display,
+				    (size_t)cap * sizeof(*out.display));
+				out.names =
+				    xrealloc(out.names,
+				             (size_t)cap * sizeof(*out.names));
+			}
+			out.names[out.count] = xstrdup(name);
+			size_t n = strlen(name) + 3;
+			char *disp = xmalloc(n);
+			snprintf(disp, n, "%s %s", head ? "*" : " ", name);
+			out.display[out.count] = disp;
+			out.count++;
+		}
+		git_reference_free(ref);
+	}
+	git_branch_iterator_free(it);
+	return out;
+}
+
+void git_branchlist_free(git_branchlist *b)
+{
+	for (int i = 0; i < b->count; i++) {
+		free(b->display[i]);
+		free(b->names[i]);
+	}
+	free(b->display);
+	free(b->names);
+	b->display = NULL;
+	b->names = NULL;
+	b->count = 0;
+}
+
+void git_reload_head(git_ctx *g)
+{
+	free(g->branch);
+	git_reference *head = NULL;
+	if (git_repository_head(&head, g->repo) == 0) {
+		const char *sh = git_reference_shorthand(head);
+		g->branch = xstrdup(sh ? sh : "HEAD");
+		git_reference_free(head);
+	} else {
+		g->branch = xstrdup("HEAD");
+	}
+}
+
+int gitop_checkout(git_ctx *g, const char *branch, char *err, size_t errlen)
+{
+	git_object *target = NULL;
+	if (git_revparse_single(&target, g->repo, branch) != 0) {
+		copy_err(err, errlen, "no such branch");
+		return -1;
+	}
+
+	git_checkout_options opts;
+	git_checkout_options_init(&opts, GIT_CHECKOUT_OPTIONS_VERSION);
+	opts.checkout_strategy =
+	    GIT_CHECKOUT_SAFE; /* refuse to clobber edits */
+	int rc = git_checkout_tree(g->repo, target, &opts);
+	git_object_free(target);
+	if (rc != 0) {
+		copy_err(err, errlen,
+		         "checkout blocked (uncommitted changes?)");
+		return -1;
+	}
+
+	char refname[256];
+	snprintf(refname, sizeof(refname), "refs/heads/%s", branch);
+	if (git_repository_set_head(g->repo, refname) != 0) {
+		copy_err(err, errlen, "could not move HEAD");
+		return -1;
+	}
+	return 0;
+}

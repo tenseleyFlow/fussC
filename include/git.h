@@ -62,6 +62,25 @@ void git_log_free(git_log_list *l);
  * Free with git_log_free. */
 git_log_list git_reflog_list(git_ctx *g, int max);
 
+/* Local branches for the branch browser. `display[i]` is "* name" for the
+ * current branch else "  name"; `names[i]` is the bare name (for checkout). */
+typedef struct {
+	char **display;
+	char **names;
+	int count;
+} git_branchlist;
+
+git_branchlist git_branches(git_ctx *g);
+void git_branchlist_free(git_branchlist *b);
+
+/* Re-read HEAD's short branch name into g->branch (after a checkout). */
+void git_reload_head(git_ctx *g);
+
+/* Check out a local branch: update the worktree+index to it (refusing if that
+ * would clobber uncommitted changes) and move HEAD. 0 on success, else -1 with
+ * a terse message. */
+int gitop_checkout(git_ctx *g, const char *branch, char *err, size_t errlen);
+
 /*
  * Local mutations, all libgit2 in-process so the index is touched by ONE
  * mechanism (fixing fussr's libgit2/subprocess split). Each returns 0 on

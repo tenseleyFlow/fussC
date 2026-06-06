@@ -340,11 +340,70 @@ static void browse_reflog(loopctx *L)
 	browse_history(L, "Reflog  (Enter: show)", git_reflog_list(L->g, 5000));
 }
 
+/* Preview for the branch browser: that branch's recent one-line log. */
+struct branch_preview_ctx {
+	git_branchlist *bl;
+	bool color;
+};
+
+static char *branch_preview(void *vctx, int item)
+{
+	struct branch_preview_ctx *c = vctx;
+	char *cflag = c->color ? "--color=always" : "--color=never";
+	char *argv[] = {
+	    "git", "log", cflag, "--oneline", "-50", c->bl->names[item], NULL};
+	char *out = NULL, *err = NULL;
+	int rc = proc_run(argv, &out, &err);
+	free(err);
+	if (rc != 0 || out == NULL) {
+		free(out);
+		return xstrdup("(no log)");
+	}
+	return out;
+}
+
+/* Branch browser: pick a local branch (preview = its log); Enter checks it out
+ * (refused if it would clobber uncommitted changes), then refreshes the view.
+ */
+static void browse_branches(loopctx *L)
+{
+	git_branchlist bl = git_branches(L->g);
+	if (bl.count == 0) {
+		set_status(L->a, "no branches");
+		git_branchlist_free(&bl);
+		return;
+	}
+	struct branch_preview_ctx pc = {.bl = &bl, .color = L->color};
+	picker_spec sp = {.title = "Branches  (Enter: switch)",
+	                  .items = bl.display,
+	                  .count = bl.count,
+	                  .preview = branch_preview,
+	                  .preview_ctx = &pc};
+	int chosen = picker_run(L->s, &sp, L->color);
+	if (chosen >= 0) {
+		char err[256];
+		if (gitop_checkout(L->g, bl.names[chosen], err, sizeof(err)) !=
+		    0) {
+			set_status(L->a, err);
+		} else {
+			char msg[160];
+			snprintf(msg, sizeof(msg), "switched to %s",
+			         bl.names[chosen]);
+			git_reload_head(L->g);
+			L->branch =
+			    L->g->branch; /* header follows the switch */
+			do_refresh(L);
+			set_status(L->a, msg);
+		}
+	}
+	git_branchlist_free(&bl);
+}
+
 /* The browse menu: a picker over the available browsers (itself reusing the
  * widget). Scales as browsers are added without spending a key on each. */
 static void browse_menu(loopctx *L)
 {
-	char *items[] = {"Commits", "Reflog"};
+	char *items[] = {"Commits", "Reflog", "Branches"};
 	picker_spec sp = {.title = "Browse",
 	                  .items = items,
 	                  .count = (int)(sizeof(items) / sizeof(*items))};
@@ -355,6 +414,9 @@ static void browse_menu(loopctx *L)
 		break;
 	case 1:
 		browse_reflog(L);
+		break;
+	case 2:
+		browse_branches(L);
 		break;
 	default:
 		break; /* cancelled */
@@ -727,7 +789,9 @@ static int run_interactive(bool all)
 	nfds_t nfds = have_engine ? 2 : 1;
 
 	while (L.running) {
-		screen_draw(&s, &a, repo, branch, color);
+		/* L.branch (not the local) so the header follows a branch
+		 * switch */
+		screen_draw(&s, &a, L.repo, L.branch, color);
 
 		bool ov = overlay_active(&a.ov);
 
