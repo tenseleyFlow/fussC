@@ -23,7 +23,7 @@ LIBOBJS  = src/term.o src/util.o
 OBJS     = src/main.o $(LIBOBJS)
 
 TESTBIN  = test/run
-TESTOBJS = test/test_main.o test/test_util.o
+TESTOBJS = test/test_main.o test/test_util.o test/test_status.o
 
 .SUFFIXES: .c .o
 .c.o:
