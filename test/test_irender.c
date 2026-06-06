@@ -26,6 +26,33 @@ void test_render_frame_layout(void)
 	app_free(&a);
 }
 
+void test_render_frame_degenerate_sizes(void)
+{
+	/* Tiny / zero-sized terminals must not crash or over-read (ASan/UBSan
+	 * in CI make this assertion teeth). Exercised with an overlay up too.
+	 */
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "x/y/z.txt", ST_UNSTAGED);
+	tree_add(&a.t, "a.txt", ST_STAGED);
+	app_reflatten(&a);
+
+	int sizes[][2] = {{0, 0}, {1, 1}, {1, 80}, {80, 1},
+	                  {2, 3}, {3, 2}, {1, 0},  {0, 1}};
+	for (int i = 0; i < (int)(sizeof(sizes) / sizeof(*sizes)); i++) {
+		int r = sizes[i][0], c = sizes[i][1];
+		char **f = render_frame(&a, "repo", "trunk", true, r, c);
+		free_frame(f, r);
+		overlay_open_help(&a.ov);
+		f = render_frame(&a, "repo", "trunk", true, r, c);
+		free_frame(f, r);
+		overlay_close(&a.ov);
+	}
+	CHECK(1); /* reaching here without a sanitizer trip is the test */
+
+	app_free(&a);
+}
+
 void test_render_frame_empty_clean(void)
 {
 	app a;
