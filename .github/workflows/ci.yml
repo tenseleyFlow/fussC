@@ -42,6 +42,16 @@ jobs:
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
           ASAN_OPTIONS: detect_leaks=1
 
+  linux-tsan:
+    name: linux (tsan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgit2-dev pkg-config
+      - name: Build + test with the thread sanitizer
+        run: make OPT="-O1 -g" DBG="-fsanitize=thread" test
+
   macos:
     name: macos arm64
     runs-on: macos-latest

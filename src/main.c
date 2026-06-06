@@ -8,6 +8,8 @@
 #include "term.h"
 #include "tree.h"
 
+#include <errno.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,7 +60,7 @@ static int run_print(bool all)
 	return 0;
 }
 
-static void apply_action(app *a, action act, bool *running)
+static void apply_action(app *a, action act, bool *running, fuzzy_engine *eng)
 {
 	switch (act.kind) {
 	case ACT_QUIT:
@@ -87,14 +89,19 @@ static void apply_action(app *a, action act, bool *running)
 		break;
 	case ACT_FILTER_PUSH:
 		app_filter_push(a, act.cp);
-		app_apply_match(a, fuzzy_best_match(&a->t, a->filter));
+		if (eng)
+			fuzzy_submit(eng, &a->t, a->filter);
+		else
+			app_apply_match(a, fuzzy_best_match(&a->t, a->filter));
 		break;
 	case ACT_FILTER_BACKSPACE:
 		app_filter_backspace(a);
-		if (a->filter_len > 0)
-			app_apply_match(a, fuzzy_best_match(&a->t, a->filter));
-		else
+		if (a->filter_len == 0)
 			a->filter_nomatch = false;
+		else if (eng)
+			fuzzy_submit(eng, &a->t, a->filter);
+		else
+			app_apply_match(a, fuzzy_best_match(&a->t, a->filter));
 		break;
 	case ACT_FILTER_CLEAR:
 		app_filter_clear(a);
@@ -139,13 +146,46 @@ static int run_interactive(bool all)
 	screen s;
 	screen_init(&s);
 
+	fuzzy_engine engine;
+	bool have_engine = fuzzy_engine_start(&engine);
+	fuzzy_engine *eng = have_engine ? &engine : NULL;
+
+	struct pollfd fds[2];
+	fds[0].fd = STDIN_FILENO;
+	fds[0].events = POLLIN;
+	fds[1].fd = have_engine ? fuzzy_engine_wake_fd(&engine) : -1;
+	fds[1].events = POLLIN;
+	nfds_t nfds = have_engine ? 2 : 1;
+
 	bool running = true;
 	while (running) {
 		screen_draw(&s, &a, repo, branch, color);
-		int key = term_read_key();
-		apply_action(&a, input_classify(key), &running);
+
+		fds[0].revents = fds[1].revents = 0;
+		if (poll(fds, nfds, -1) < 0) {
+			if (errno == EINTR) {
+				term_take_resize(); /* redraw next iteration */
+				continue;
+			}
+			break;
+		}
+
+		/* Apply a ready fuzzy result (expand to + select the match). */
+		if (have_engine && (fds[1].revents & POLLIN)) {
+			uint32_t node;
+			if (fuzzy_engine_take(&engine, &node))
+				app_apply_match(&a, node);
+		}
+
+		/* Handle a keypress. */
+		if (fds[0].revents != 0) {
+			int key = term_read_key();
+			apply_action(&a, input_classify(key), &running, eng);
+		}
 	}
 
+	if (have_engine)
+		fuzzy_engine_stop(&engine);
 	screen_free(&s);
 	term_restore();
 	app_free(&a);

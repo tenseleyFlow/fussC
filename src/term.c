@@ -84,9 +84,25 @@ bool term_init(void)
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
 	signal(SIGHUP, on_signal);
-	signal(SIGWINCH, on_winch);
+
+	/* WINCH via sigaction without SA_RESTART so a resize interrupts poll().
+	 */
+	struct sigaction sa;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sa.sa_handler = on_winch;
+	sigaction(SIGWINCH, &sa, NULL);
 
 	return true;
+}
+
+bool term_take_resize(void)
+{
+	if (resized) {
+		resized = 0;
+		return true;
+	}
+	return false;
 }
 
 void term_size(int *rows, int *cols)

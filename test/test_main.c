@@ -46,6 +46,8 @@ void test_fuzzy_best_match(void);
 void test_fuzzy_auto_expand(void);
 void test_fuzzy_no_match_flag(void);
 void test_fuzzy_fuzz(void);
+void test_engine_basic(void);
+void test_engine_convergence(void);
 
 int main(void)
 {
@@ -91,6 +93,8 @@ int main(void)
 	RUN(test_fuzzy_auto_expand);
 	RUN(test_fuzzy_no_match_flag);
 	RUN(test_fuzzy_fuzz);
+	RUN(test_engine_basic);
+	RUN(test_engine_convergence);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);

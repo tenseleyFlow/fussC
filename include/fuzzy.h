@@ -1,6 +1,8 @@
 #ifndef FUSSY_FUZZY_H
 #define FUSSY_FUZZY_H
 
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "tree.h"
@@ -37,5 +39,45 @@ int fuzzy_score(const char *pat, const char *text);
  * NODE_NIL for an empty query or no match. `query` is lowercased internally.
  */
 uint32_t fuzzy_best_match(const tree *t, const char *query);
+
+/*
+ * Background scoring engine. A persistent worker thread scores the arena off
+ * the main thread so input never blocks on a huge tree. The query/result
+ * handoff is guarded by a mutex+condvar with a generation counter (stale
+ * results are dropped); the worker writes a byte to a self-pipe when a result
+ * is ready so the main loop's poll() wakes. The arena is immutable between
+ * submits, so the worker scores it without holding the lock.
+ */
+typedef struct {
+	pthread_t thread;
+	pthread_mutex_t mu;
+	pthread_cond_t cv;
+
+	/* guarded by mu */
+	const tree *arena;
+	char query[256];
+	uint64_t generation; /* bumped on each submit */
+	uint64_t processed;  /* generation the worker last began scoring */
+	bool quit;
+	uint64_t result_gen;
+	uint32_t result_node;
+	bool result_ready;
+
+	int wake_r; /* main polls this end */
+	int wake_w; /* worker writes this end */
+	bool started;
+} fuzzy_engine;
+
+bool fuzzy_engine_start(fuzzy_engine *e);
+void fuzzy_engine_stop(fuzzy_engine *e);
+int fuzzy_engine_wake_fd(const fuzzy_engine *e);
+
+/* Publish a new query against `arena` (bumps the generation, wakes the worker).
+ */
+void fuzzy_submit(fuzzy_engine *e, const tree *arena, const char *query);
+
+/* Drain the wake pipe and, if the latest generation's result is ready, store it
+ * in *node and return true. Returns false when no fresh result is pending. */
+bool fuzzy_engine_take(fuzzy_engine *e, uint32_t *node);
 
 #endif /* FUSSY_FUZZY_H */

@@ -19,6 +19,10 @@ void term_restore(void);
 /* Current terminal size in character cells. */
 void term_size(int *rows, int *cols);
 
+/* True (once) if a SIGWINCH has arrived since the last call; clears the flag.
+ * Lets a poll-based loop notice resizes that interrupted the wait. */
+bool term_take_resize(void);
+
 /*
  * Key codes. Printable input is returned as its Unicode codepoint
  * (0..0x10FFFF). Ctrl-<letter> is the raw control value 1..26 (use
