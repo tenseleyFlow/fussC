@@ -26,6 +26,23 @@ void test_render_frame_layout(void)
 	app_free(&a);
 }
 
+void test_render_frame_empty_clean(void)
+{
+	app a;
+	app_init(&a);
+	app_reflatten(&a); /* no files: clean / empty working tree */
+
+	char **f = render_frame(&a, "repo", "trunk", false, 8, 80);
+	bool clean = false;
+	for (int i = 0; i < 8; i++)
+		if (strstr(f[i], "working tree clean"))
+			clean = true;
+	CHECK(clean);
+	free_frame(f, 8);
+
+	app_free(&a);
+}
+
 void test_render_frame_selection(void)
 {
 	app a;

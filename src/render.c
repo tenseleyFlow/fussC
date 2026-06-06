@@ -594,6 +594,29 @@ char **render_frame(const app *a, const char *repo, const char *branch,
 		}
 	}
 
+	/* Empty viewport: the working tree is clean (or the repo is empty).
+	 * Fuzzy jumps rather than filters, so len==0 is never a no-match state.
+	 */
+	if (len == 0 && tree_h > 0) {
+		const char *hint = "working tree clean";
+		int w = (int)display_width(hint);
+		int pad = (cols - w) / 2;
+		if (pad < 0)
+			pad = 0;
+		strbuf s = {0};
+		if (color)
+			sb_put(&s, "\033[90m");
+		for (int i = 0; i < pad; i++)
+			sb_putc(&s, ' ');
+		sb_put(&s, hint);
+		if (color)
+			sb_put(&s, "\033[0m");
+		free(lines[tree_top + tree_h / 2]);
+		lines[tree_top + tree_h / 2] =
+		    clip_to_width(s.buf ? s.buf : "", cols);
+		free(s.buf);
+	}
+
 	if (foot_rows >= 1) { /* nav row */
 		char *ft = build_footer_nav(a, color);
 		lines[rows - foot_rows] = clip_to_width(ft, cols);
