@@ -21,6 +21,16 @@ typedef struct {
 	const char *title;
 	char *const *items;
 	int count;
+
+	/*
+	 * Optional preview: given the index of the selected item, return a heap
+	 * string (the picker frees it) to show in a right-hand pane, or NULL
+	 * for none. Called only when the selection changes - the result is
+	 * cached - so a slowish command (e.g. `git show`) is fine. With no
+	 * preview fn, the list uses the full width.
+	 */
+	char *(*preview)(void *ctx, int item);
+	void *preview_ctx;
 } picker_spec;
 
 /*
@@ -42,6 +52,12 @@ typedef struct {
 	int total;         /* count of all items, for the "m/n" counter */
 	int sel;           /* selected position within matches[] */
 	const char *query; /* current query text (shown on the prompt line) */
+
+	/* Preview pane: lines of the selected item's preview (already split on
+	 * newlines), or NULL for no preview. When set and the terminal is wide
+	 * enough, the body splits into list | preview. */
+	char *const *preview_lines;
+	int preview_count;
 } picker_view;
 
 /*

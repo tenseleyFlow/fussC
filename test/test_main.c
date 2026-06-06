@@ -86,6 +86,7 @@ void test_picker_filter_ranks_best_first(void);
 void test_picker_filter_no_match(void);
 void test_render_picker_frame_layout(void);
 void test_render_picker_frame_no_matches(void);
+void test_render_picker_frame_preview(void);
 void test_render_picker_frame_tiny(void);
 
 int main(void)
@@ -172,6 +173,7 @@ int main(void)
 	RUN(test_picker_filter_no_match);
 	RUN(test_render_picker_frame_layout);
 	RUN(test_render_picker_frame_no_matches);
+	RUN(test_render_picker_frame_preview);
 	RUN(test_render_picker_frame_tiny);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,

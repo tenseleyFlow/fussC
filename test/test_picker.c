@@ -115,6 +115,48 @@ void test_render_picker_frame_no_matches(void)
 	free_frame(f, 8);
 }
 
+void test_render_picker_frame_preview(void)
+{
+	int matches[] = {0, 1, 2, 3, 4};
+	char *const preview[] = {"commit abc123", "Author: t", "",
+	                         "    add the thing"};
+	picker_view v = {.title = "Commits",
+	                 .items = ITEMS,
+	                 .matches = matches,
+	                 .match_count = N,
+	                 .total = N,
+	                 .sel = 0,
+	                 .query = "",
+	                 .preview_lines = preview,
+	                 .preview_count = 4};
+
+	char **f = render_picker_frame(&v, 10, 80, false);
+	/* The body rows carry a separator and the preview text alongside items.
+	 */
+	bool sep = false, prev = false, item = false;
+	for (int i = 2; i < 9; i++) {
+		if (strstr(f[i], "\342\224\202"))
+			sep = true;
+		if (strstr(f[i], "commit abc123"))
+			prev = true;
+		if (strstr(f[i], "src/render.c"))
+			item = true;
+	}
+	CHECK(sep);
+	CHECK(prev);
+	CHECK(item);
+	free_frame(f, 10);
+
+	/* Too narrow: no split, preview omitted, list spans the width. */
+	char **g = render_picker_frame(&v, 10, 20, false);
+	bool nosep = true;
+	for (int i = 0; i < 10; i++)
+		if (strstr(g[i], "\342\224\202"))
+			nosep = false;
+	CHECK(nosep);
+	free_frame(g, 10);
+}
+
 void test_render_picker_frame_tiny(void)
 {
 	/* Degenerate sizes must not crash (ASan/UBSan give this teeth). */
