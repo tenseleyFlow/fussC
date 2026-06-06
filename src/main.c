@@ -324,9 +324,9 @@ static void browse_history(loopctx *L, const char *title, git_log_list log)
 	                  .count = log.count,
 	                  .preview = commit_preview,
 	                  .preview_ctx = &pc};
-	int chosen = picker_run(L->s, &sp, L->color);
-	if (chosen >= 0)
-		show_commit(L, log.shas[chosen]);
+	picker_result r = picker_run(L->s, &sp, L->color);
+	if (r.key == KEY_ENTER && r.index >= 0)
+		show_commit(L, log.shas[r.index]);
 	git_log_free(&log);
 }
 
@@ -362,41 +362,77 @@ static char *branch_preview(void *vctx, int item)
 	return out;
 }
 
-/* Branch browser: pick a local branch (preview = its log); Enter checks it out
- * (refused if it would clobber uncommitted changes), then refreshes the view.
- */
+/* Branch browser: pick a local branch (preview = its log). Enter switches to it
+ * (refused if it would clobber edits); ^A creates a new branch; ^D deletes the
+ * selection. After create/delete the list reloads (picker -> mutation ->
+ * reload). */
 static void browse_branches(loopctx *L)
 {
-	git_branchlist bl = git_branches(L->g);
-	if (bl.count == 0) {
-		set_status(L->a, "no branches");
-		git_branchlist_free(&bl);
-		return;
-	}
-	struct branch_preview_ctx pc = {.bl = &bl, .color = L->color};
-	picker_spec sp = {.title = "Branches  (Enter: switch)",
-	                  .items = bl.display,
-	                  .count = bl.count,
-	                  .preview = branch_preview,
-	                  .preview_ctx = &pc};
-	int chosen = picker_run(L->s, &sp, L->color);
-	if (chosen >= 0) {
-		char err[256];
-		if (gitop_checkout(L->g, bl.names[chosen], err, sizeof(err)) !=
-		    0) {
-			set_status(L->a, err);
-		} else {
-			char msg[160];
-			snprintf(msg, sizeof(msg), "switched to %s",
-			         bl.names[chosen]);
-			git_reload_head(L->g);
-			L->branch =
-			    L->g->branch; /* header follows the switch */
-			do_refresh(L);
-			set_status(L->a, msg);
+	static const picker_binding binds[] = {
+	    {KEY_CTRL('A'), "^A new"},
+	    {KEY_CTRL('D'), "^D del"},
+	};
+
+	bool again = true;
+	while (again) {
+		again = false;
+		git_branchlist bl = git_branches(L->g);
+		if (bl.count == 0) {
+			set_status(L->a, "no branches");
+			git_branchlist_free(&bl);
+			return;
 		}
+		struct branch_preview_ctx pc = {.bl = &bl, .color = L->color};
+		picker_spec sp = {.title = "Branches  (Enter: switch)",
+		                  .items = bl.display,
+		                  .count = bl.count,
+		                  .preview = branch_preview,
+		                  .preview_ctx = &pc,
+		                  .bindings = binds,
+		                  .binding_count = 2};
+		picker_result r = picker_run(L->s, &sp, L->color);
+
+		char err[256], msg[160];
+		if (r.key == KEY_ENTER && r.index >= 0) {
+			if (gitop_checkout(L->g, bl.names[r.index], err,
+			                   sizeof(err)) != 0) {
+				set_status(L->a, err);
+			} else {
+				snprintf(msg, sizeof(msg), "switched to %s",
+				         bl.names[r.index]);
+				git_reload_head(L->g);
+				L->branch = L->g->branch; /* header follows */
+				do_refresh(L);
+				set_status(L->a, msg);
+			}
+		} else if (r.key == KEY_CTRL('D') && r.index >= 0) {
+			if (gitop_branch_delete(L->g, bl.names[r.index], err,
+			                        sizeof(err)) != 0) {
+				set_status(L->a, err);
+			} else {
+				snprintf(msg, sizeof(msg), "deleted %s",
+				         bl.names[r.index]);
+				set_status(L->a, msg);
+				again = true; /* reload the list */
+			}
+		} else if (r.key == KEY_CTRL('A')) {
+			char name[128];
+			if (prompt_line(L->s, "New branch", name, sizeof(name),
+			                L->color)) {
+				if (gitop_branch_create(L->g, name, err,
+				                        sizeof(err)) != 0)
+					set_status(L->a, err);
+				else {
+					snprintf(msg, sizeof(msg), "created %s",
+					         name);
+					set_status(L->a, msg);
+				}
+			}
+			again = true; /* reopen the (possibly grown) list */
+		}
+
+		git_branchlist_free(&bl);
 	}
-	git_branchlist_free(&bl);
 }
 
 /* The browse menu: a picker over the available browsers (itself reusing the
@@ -407,8 +443,10 @@ static void browse_menu(loopctx *L)
 	picker_spec sp = {.title = "Browse",
 	                  .items = items,
 	                  .count = (int)(sizeof(items) / sizeof(*items))};
-	int choice = picker_run(L->s, &sp, L->color);
-	switch (choice) {
+	picker_result r = picker_run(L->s, &sp, L->color);
+	if (r.key != KEY_ENTER)
+		return; /* cancelled */
+	switch (r.index) {
 	case 0:
 		browse_commits(L);
 		break;
@@ -419,7 +457,7 @@ static void browse_menu(loopctx *L)
 		browse_branches(L);
 		break;
 	default:
-		break; /* cancelled */
+		break;
 	}
 }
 

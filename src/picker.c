@@ -243,6 +243,10 @@ char **render_picker_frame(const picker_view *v, int rows, int cols, bool color)
 		           "Esc cancel");
 		if (split)
 			sb_put(&s, "  \342\206\220\342\206\222 scroll");
+		if (v->extra != NULL && v->extra[0] != '\0') {
+			sb_put(&s, "  ");
+			sb_put(&s, v->extra);
+		}
 		if (color)
 			sb_put(&s, "\033[0m");
 		set_line(lines, rows - 1, s.buf ? s.buf : "", cols);
@@ -256,7 +260,7 @@ char **render_picker_frame(const picker_view *v, int rows, int cols, bool color)
 	return lines;
 }
 
-int picker_run(screen *s, const picker_spec *spec, bool color)
+picker_result picker_run(screen *s, const picker_spec *spec, bool color)
 {
 	screen_invalidate(s); /* we own the screen now: full paint */
 
@@ -267,8 +271,17 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 	int mcount = 0;
 	int *matches = picker_filter(spec->items, spec->count, query, &mcount);
 	int sel = 0;
-	int result = -1;
+	picker_result result = {.index = -1, .key = KEY_ESC};
 	bool running = true;
+
+	/* Hint text for the spec's bindings, built once (e.g. "^N new  ^D
+	 * del"). */
+	strbuf extra = {0};
+	for (int b = 0; b < spec->binding_count; b++) {
+		if (b > 0)
+			sb_put(&extra, "  ");
+		sb_put(&extra, spec->bindings[b].label);
+	}
 
 	/* Preview is recomputed only when the selected item changes. */
 	int preview_item = -1;
@@ -315,21 +328,39 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 		                 .query = query,
 		                 .preview_lines = pv,
 		                 .preview_count = pv_count,
-		                 .preview_col = preview_col};
+		                 .preview_col = preview_col,
+		                 .extra = extra.buf};
 		char **frame = render_picker_frame(&v, rows, cols, color);
 		screen_present(s, frame, rows);
 
 		int key = term_read_key();
 		bool refilter = false;
+
+		/* Browser bindings win over the filter (they use non-printable
+		 * keys). Surface the key + selected item to the caller. */
+		bool bound = false;
+		for (int b = 0; b < spec->binding_count; b++) {
+			if (key == spec->bindings[b].key) {
+				result.index = mcount > 0 ? matches[sel] : -1;
+				result.key = key;
+				running = false;
+				bound = true;
+				break;
+			}
+		}
+		if (bound)
+			break;
+
 		switch (key) {
 		case KEY_EOF:
 		case KEY_ESC:
-			result = -1;
+			result.index = -1;
+			result.key = key;
 			running = false;
 			break;
 		case KEY_ENTER:
-			if (mcount > 0)
-				result = matches[sel];
+			result.index = mcount > 0 ? matches[sel] : -1;
+			result.key = KEY_ENTER;
 			running = false;
 			break;
 		case KEY_UP:
@@ -390,6 +421,80 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 
 	str_free_lines(pv, pv_count);
 	free(matches);
+	free(extra.buf);
 	screen_invalidate(s); /* caller repaints its own view next */
 	return result;
+}
+
+bool prompt_line(screen *s, const char *title, char *out, size_t outsz,
+                 bool color)
+{
+	screen_invalidate(s);
+
+	char buf[256];
+	size_t len = 0;
+	buf[0] = '\0';
+	bool accepted = false;
+	bool running = true;
+
+	while (running) {
+		int rows, cols;
+		term_size(&rows, &cols);
+
+		char **lines =
+		    xmalloc((size_t)(rows > 0 ? rows : 1) * sizeof(*lines));
+		for (int i = 0; i < rows; i++)
+			lines[i] = NULL;
+
+		int prow = rows > 0 ? rows / 2 : 0;
+		if (rows > 0) {
+			strbuf ln = {0};
+			if (color)
+				sb_put(&ln, "\033[1m");
+			sb_put(&ln, title ? title : "");
+			if (color)
+				sb_put(&ln, "\033[0m");
+			sb_put(&ln, "> ");
+			sb_put(&ln, buf);
+			if (color)
+				sb_put(&ln, "\033[7m \033[0m"); /* cursor */
+			lines[prow] = clip_to_width(ln.buf ? ln.buf : "", cols);
+			free(ln.buf);
+		}
+		for (int i = 0; i < rows; i++)
+			if (lines[i] == NULL)
+				lines[i] = xstrdup("");
+		screen_present(s, lines, rows);
+
+		int key = term_read_key();
+		if (key == KEY_ENTER) {
+			accepted = len > 0;
+			running = false;
+		} else if (key == KEY_ESC || key == KEY_EOF) {
+			running = false;
+		} else if (key == KEY_BACKSPACE) {
+			if (len > 0) {
+				size_t i = len;
+				do {
+					i--;
+				} while (i > 0 && ((unsigned char)buf[i] &
+				                   0xC0) == 0x80);
+				buf[i] = '\0';
+				len = i;
+			}
+		} else if (key >= 0x20 && key < KEY_SPECIAL_BASE) {
+			char enc[4];
+			int n = utf8_encode((uint32_t)key, enc);
+			if (len + (size_t)n + 1 < sizeof(buf)) {
+				memcpy(buf + len, enc, (size_t)n);
+				len += (size_t)n;
+				buf[len] = '\0';
+			}
+		}
+	}
+
+	if (accepted && outsz > 0)
+		snprintf(out, outsz, "%s", buf);
+	screen_invalidate(s);
+	return accepted;
 }

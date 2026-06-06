@@ -17,6 +17,16 @@
  * wrapper.
  */
 
+/*
+ * A browser-defined key the picker surfaces instead of treating as filter
+ * input. Use a non-printable key (Ctrl-letter, Delete, F-key) so it does not
+ * collide with the always-on fuzzy filter. The label is shown in the hint row.
+ */
+typedef struct {
+	int key;
+	const char *label;
+} picker_binding;
+
 typedef struct {
 	const char *title;
 	char *const *items;
@@ -31,7 +41,22 @@ typedef struct {
 	 */
 	char *(*preview)(void *ctx, int item);
 	void *preview_ctx;
+
+	/* Optional extra keys the browser handles (delete, new, apply, ...). */
+	const picker_binding *bindings;
+	int binding_count;
 } picker_spec;
+
+/*
+ * How a picker_run ended: `key` is KEY_ENTER on a normal accept, one of the
+ * spec's binding keys when such a key was pressed, or KEY_ESC/KEY_EOF on
+ * cancel. `index` is the selected item index for accept/binding (-1 when the
+ * list was empty or on cancel).
+ */
+typedef struct {
+	int index;
+	int key;
+} picker_result;
 
 /*
  * Rank items[0..count) against `query` and return a heap array of matching item
@@ -59,6 +84,8 @@ typedef struct {
 	char *const *preview_lines;
 	int preview_count;
 	int preview_col; /* horizontal scroll offset (display columns) */
+	const char
+	    *extra; /* optional extra hint text (binding labels), or NULL */
 } picker_view;
 
 /*
@@ -72,10 +99,20 @@ char **render_picker_frame(const picker_view *v, int rows, int cols,
 
 /*
  * Run the picker modally: take over `s`, loop on input (type to filter,
- * Up/Down or Ctrl-P/Ctrl-N to move, Enter to choose, Esc to cancel), and return
- * the chosen index into spec->items, or -1 if cancelled. Forces a full repaint
- * on entry and exit so it composes with the main view's renderer.
+ * Up/Down or Ctrl-P/Ctrl-N to move, Left/Right to scroll the preview, Enter to
+ * choose, Esc to cancel, plus any spec bindings). Returns the outcome (see
+ * picker_result). Forces a full repaint on entry and exit so it composes with
+ * the main view's renderer.
  */
-int picker_run(screen *s, const picker_spec *spec, bool color);
+picker_result picker_run(screen *s, const picker_spec *spec, bool color);
+
+/*
+ * One-line modal text prompt (e.g. a new branch name): take over `s`, show
+ * "title> input", edit with type/Backspace, Enter accepts, Esc cancels. On
+ * accept, copies the entry into out[0..outsz) and returns true; on cancel (or
+ * empty entry) returns false. Repaints fully on exit.
+ */
+bool prompt_line(screen *s, const char *title, char *out, size_t outsz,
+                 bool color);
 
 #endif /* FUSSY_PICKER_H */

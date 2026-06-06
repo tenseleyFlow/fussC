@@ -868,3 +868,69 @@ int gitop_checkout(git_ctx *g, const char *branch, char *err, size_t errlen)
 	}
 	return 0;
 }
+
+int gitop_branch_create(git_ctx *g, const char *name, char *err, size_t errlen)
+{
+	git_reference *head = NULL;
+	if (git_repository_head(&head, g->repo) != 0) {
+		copy_err(err, errlen, "no HEAD to branch from");
+		return -1;
+	}
+	git_commit *target = NULL;
+	int rc =
+	    git_reference_peel((git_object **)&target, head, GIT_OBJECT_COMMIT);
+	git_reference_free(head);
+	if (rc != 0) {
+		copy_err(err, errlen, "no commit at HEAD");
+		return -1;
+	}
+
+	git_reference *newref = NULL;
+	rc = git_branch_create(&newref, g->repo, name, target, 0);
+	git_commit_free(target);
+	if (rc != 0) {
+		copy_err(err, errlen, "branch create failed (already exists?)");
+		return -1;
+	}
+	git_reference_free(newref);
+	return 0;
+}
+
+int gitop_branch_delete(git_ctx *g, const char *name, char *err, size_t errlen)
+{
+	git_reference *ref = NULL;
+	if (git_branch_lookup(&ref, g->repo, name, GIT_BRANCH_LOCAL) != 0) {
+		copy_err(err, errlen, "no such branch");
+		return -1;
+	}
+	if (git_branch_is_head(ref) == 1) {
+		git_reference_free(ref);
+		copy_err(err, errlen, "can't delete the current branch");
+		return -1;
+	}
+
+	/* Refuse unless the branch is fully merged into HEAD (like git -d). */
+	bool merged = false;
+	const git_oid *btip = git_reference_target(ref);
+	git_reference *head = NULL;
+	if (git_repository_head(&head, g->repo) == 0) {
+		const git_oid *h = git_reference_target(head);
+		if (h != NULL && btip != NULL)
+			merged = git_oid_equal(h, btip) ||
+			         git_graph_descendant_of(g->repo, h, btip) == 1;
+		git_reference_free(head);
+	}
+	if (!merged) {
+		git_reference_free(ref);
+		copy_err(err, errlen, "not fully merged (refusing delete)");
+		return -1;
+	}
+
+	int rc = git_branch_delete(ref);
+	git_reference_free(ref);
+	if (rc != 0) {
+		copy_err(err, errlen, "branch delete failed");
+		return -1;
+	}
+	return 0;
+}

@@ -323,6 +323,28 @@ void test_git_branches(void)
 		git_reload_head(&g);
 		CHECK_STR_EQ(g.branch, "feature");
 
+		/* Create a branch at HEAD; it shows up. */
+		CHECK(gitop_branch_create(&g, "newbr", err, sizeof(err)) == 0);
+		git_branchlist b2 = git_branches(&g);
+		bool has_new = false;
+		for (int i = 0; i < b2.count; i++)
+			if (strcmp(b2.names[i], "newbr") == 0)
+				has_new = true;
+		CHECK(has_new);
+		git_branchlist_free(&b2);
+
+		/* Delete refuses the current branch, allows a merged one. */
+		CHECK(gitop_branch_delete(&g, "feature", err, sizeof(err)) !=
+		      0);
+		CHECK(gitop_branch_delete(&g, "newbr", err, sizeof(err)) == 0);
+		git_branchlist b3 = git_branches(&g);
+		bool gone = true;
+		for (int i = 0; i < b3.count; i++)
+			if (strcmp(b3.names[i], "newbr") == 0)
+				gone = false;
+		CHECK(gone);
+		git_branchlist_free(&b3);
+
 		git_close(&g);
 	}
 

@@ -81,6 +81,12 @@ void git_reload_head(git_ctx *g);
  * a terse message. */
 int gitop_checkout(git_ctx *g, const char *branch, char *err, size_t errlen);
 
+/* Create a local branch at HEAD. Fails if it already exists. */
+int gitop_branch_create(git_ctx *g, const char *name, char *err, size_t errlen);
+/* Delete a local branch. Refuses the current branch and any branch not fully
+ * merged into HEAD (mirroring `git branch -d`). */
+int gitop_branch_delete(git_ctx *g, const char *name, char *err, size_t errlen);
+
 /*
  * Local mutations, all libgit2 in-process so the index is touched by ONE
  * mechanism (fixing fussr's libgit2/subprocess split). Each returns 0 on
