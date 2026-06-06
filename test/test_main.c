@@ -8,6 +8,9 @@ void test_xstrdup(void);
 void test_xmalloc_zero(void);
 void test_status_merge(void);
 void test_status_is_dirty(void);
+void test_tree_build(void);
+void test_tree_merge_status(void);
+void test_tree_case_order(void);
 
 int main(void)
 {
@@ -15,6 +18,9 @@ int main(void)
 	RUN(test_xmalloc_zero);
 	RUN(test_status_merge);
 	RUN(test_status_is_dirty);
+	RUN(test_tree_build);
+	RUN(test_tree_merge_status);
+	RUN(test_tree_case_order);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);

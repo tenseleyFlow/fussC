@@ -19,11 +19,12 @@ LDLIBS   = -lpthread
 BIN      = fussy
 
 # Object lists are explicit (no wildcard) so BSD make and GNU make agree.
-LIBOBJS  = src/term.o src/util.o
+LIBOBJS  = src/term.o src/util.o src/tree.o
 OBJS     = src/main.o $(LIBOBJS)
 
 TESTBIN  = test/run
-TESTOBJS = test/test_main.o test/test_util.o test/test_status.o
+TESTOBJS = test/test_main.o test/test_util.o test/test_status.o \
+           test/test_tree.o
 
 .SUFFIXES: .c .o
 .c.o:
