@@ -55,6 +55,25 @@ void test_overlay_utf8_edit(void)
 	CHECK(o.len == 1);
 }
 
+void test_overlay_tag_two_step(void)
+{
+	overlay o;
+	overlay_open_tag(&o);
+	CHECK(o.kind == OV_TAG);
+	overlay_insert(&o, 'v');
+	overlay_insert(&o, '1');
+	CHECK_STR_EQ(o.text, "v1");
+
+	/* Step 2 keeps the name in target and gives a fresh, empty message. */
+	overlay_open_tag_message(&o, o.text);
+	CHECK(o.kind == OV_TAG_MSG);
+	CHECK_STR_EQ(o.target, "v1");
+	CHECK(o.len == 0);
+
+	overlay_insert(&o, 'h'); /* message remains editable */
+	CHECK_STR_EQ(o.text, "h");
+}
+
 void test_overlay_confirm_is_not_editable(void)
 {
 	overlay o;

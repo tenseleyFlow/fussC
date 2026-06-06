@@ -69,6 +69,7 @@ void test_engine_pause_resume(void);
 void test_overlay_commit_edit(void);
 void test_overlay_amend_and_rename_prefill(void);
 void test_overlay_utf8_edit(void);
+void test_overlay_tag_two_step(void);
 void test_overlay_confirm_is_not_editable(void);
 void test_proc_stdout(void);
 void test_proc_stderr_and_exit(void);
@@ -143,6 +144,7 @@ int main(void)
 	RUN(test_overlay_commit_edit);
 	RUN(test_overlay_amend_and_rename_prefill);
 	RUN(test_overlay_utf8_edit);
+	RUN(test_overlay_tag_two_step);
 	RUN(test_overlay_confirm_is_not_editable);
 	RUN(test_proc_stdout);
 	RUN(test_proc_stderr_and_exit);

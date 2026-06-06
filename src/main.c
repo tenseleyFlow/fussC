@@ -420,7 +420,14 @@ static void overlay_execute(loopctx *L)
 	case OV_TAG:
 		if (o->len == 0)
 			return;
-		if (gitop_tag(L->g, o->text, NULL, err, sizeof(err)) != 0) {
+		/* Step 1 done: keep the name, collect an annotation message. */
+		overlay_open_tag_message(o, o->text);
+		break;
+	case OV_TAG_MSG: {
+		/* Empty message -> lightweight tag (gitop_tag treats NULL so).
+		 */
+		const char *msg = o->len > 0 ? o->text : NULL;
+		if (gitop_tag(L->g, o->target, msg, err, sizeof(err)) != 0) {
 			set_status(a, err);
 			return;
 		}
@@ -428,6 +435,7 @@ static void overlay_execute(loopctx *L)
 		do_refresh(L);
 		set_status(a, "tagged");
 		break;
+	}
 	case OV_RENAME:
 		if (o->len == 0 || strcmp(o->text, o->target) == 0) {
 			overlay_close(o);

@@ -46,6 +46,13 @@ TESTOBJS = test/test_main.o test/test_util.o test/test_status.o \
            test/test_fuzzy.o test/test_fuzzy_engine.o test/test_git_ops.o \
            test/test_overlay.o test/test_proc.o test/test_gitnet.o
 
+# Headers listed explicitly (same reason as the object lists). The per-object
+# rules near the end pin each object to all of them.
+HEADERS  = include/app.h include/flatten.h include/fussy.h include/fuzzy.h \
+           include/git.h include/input.h include/overlay.h include/proc.h \
+           include/render.h include/status.h include/term.h include/tree.h \
+           include/util.h include/width.h test/test.h
+
 .SUFFIXES: .c .o
 .c.o:
 	$(CC) $(CFLAGS) $(GIT2_CFLAGS) -c $< -o $@
@@ -80,3 +87,39 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BIN)
 
 .PHONY: all test clean release install uninstall
+
+# Per-object header deps, after the goals so `all` stays the default. Coarse
+# (every object vs every header) but correct and portable: each line names its
+# source so both makes still apply the .c.o rule. A bare `obj: $(HEADERS)`
+# drops the source prereq and breaks the implicit rule.
+src/main.o: src/main.c $(HEADERS)
+src/term.o: src/term.c $(HEADERS)
+src/util.o: src/util.c $(HEADERS)
+src/tree.o: src/tree.c $(HEADERS)
+src/flatten.o: src/flatten.c $(HEADERS)
+src/git.o: src/git.c $(HEADERS)
+src/render.o: src/render.c $(HEADERS)
+src/width.o: src/width.c $(HEADERS)
+src/app.o: src/app.c $(HEADERS)
+src/input.o: src/input.c $(HEADERS)
+src/fuzzy.o: src/fuzzy.c $(HEADERS)
+src/overlay.o: src/overlay.c $(HEADERS)
+src/proc.o: src/proc.c $(HEADERS)
+test/test_main.o: test/test_main.c $(HEADERS)
+test/test_util.o: test/test_util.c $(HEADERS)
+test/test_status.o: test/test_status.c $(HEADERS)
+test/test_tree.o: test/test_tree.c $(HEADERS)
+test/test_flatten.o: test/test_flatten.c $(HEADERS)
+test/test_git.o: test/test_git.c $(HEADERS)
+test/test_render.o: test/test_render.c $(HEADERS)
+test/test_width.o: test/test_width.c $(HEADERS)
+test/test_key.o: test/test_key.c $(HEADERS)
+test/test_nav.o: test/test_nav.c $(HEADERS)
+test/test_irender.o: test/test_irender.c $(HEADERS)
+test/test_input.o: test/test_input.c $(HEADERS)
+test/test_fuzzy.o: test/test_fuzzy.c $(HEADERS)
+test/test_fuzzy_engine.o: test/test_fuzzy_engine.c $(HEADERS)
+test/test_git_ops.o: test/test_git_ops.c $(HEADERS)
+test/test_overlay.o: test/test_overlay.c $(HEADERS)
+test/test_proc.o: test/test_proc.c $(HEADERS)
+test/test_gitnet.o: test/test_gitnet.c $(HEADERS)

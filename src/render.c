@@ -455,14 +455,15 @@ static void draw_overlay(char **lines, int rows, int cols, const overlay *o,
 		}
 	}
 
-	const char *hint =
-	    o->kind == OV_CONFIRM  ? ""
-	    : o->kind == OV_HELP   ? "any key to close"
-	    : o->kind == OV_REMOTE ? "\342\206\221\342\206\223 select  "
-	                             "Enter  Esc cancel"
-	    : o->kind == OV_COMMIT ? "Enter commit  Esc cancel"
-	    : o->kind == OV_RENAME ? "Enter rename  Esc cancel"
-	                           : "Enter create tag  Esc cancel";
+	const char *hint = o->kind == OV_CONFIRM ? ""
+	                   : o->kind == OV_HELP  ? "any key to close"
+	                   : o->kind == OV_REMOTE
+	                       ? "\342\206\221\342\206\223 select  "
+	                         "Enter  Esc cancel"
+	                   : o->kind == OV_COMMIT ? "Enter commit  Esc cancel"
+	                   : o->kind == OV_RENAME ? "Enter rename  Esc cancel"
+	                   : o->kind == OV_TAG    ? "Enter next  Esc cancel"
+	                                       : "Enter create tag  Esc cancel";
 	bool has_hint = hint[0] != '\0';
 
 	int box_w = inner + 4; /* BOX_V + space + inner + space + BOX_V */

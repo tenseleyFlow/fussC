@@ -17,7 +17,8 @@
 typedef enum {
 	OV_NONE,
 	OV_COMMIT,  /* commit or amend message (auto-growing box) */
-	OV_TAG,     /* tag name */
+	OV_TAG,     /* tag name (step 1) */
+	OV_TAG_MSG, /* tag annotation message (step 2; empty = lightweight) */
 	OV_RENAME,  /* rename input */
 	OV_CONFIRM, /* y/n confirmation */
 	OV_HELP,    /* read-only keymap reference */
@@ -58,6 +59,9 @@ void overlay_close(overlay *o);
 
 void overlay_open_commit(overlay *o, bool amend, const char *prefill);
 void overlay_open_tag(overlay *o);
+/* Step 2 of tagging: keep `name` (stashed in target), collect the annotation.
+ */
+void overlay_open_tag_message(overlay *o, const char *name);
 void overlay_open_rename(overlay *o, const char *current);
 void overlay_open_confirm(overlay *o, const char *prompt);
 void overlay_open_help(overlay *o);

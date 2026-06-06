@@ -55,6 +55,16 @@ void overlay_open_tag(overlay *o)
 	set_title(o, "Tag name");
 }
 
+void overlay_open_tag_message(overlay *o, const char *name)
+{
+	o->kind = OV_TAG_MSG;
+	o->amend = false;
+	strncpy(o->target, name ? name : "", sizeof(o->target) - 1);
+	o->target[sizeof(o->target) - 1] = '\0';
+	set_text(o, "");
+	set_title(o, "Tag message (empty = lightweight)");
+}
+
 void overlay_open_rename(overlay *o, const char *current)
 {
 	o->kind = OV_RENAME;
@@ -103,7 +113,7 @@ void overlay_open_remote(overlay *o, char *const *names, int count, int net_op)
 static bool editable(const overlay *o)
 {
 	return o->kind == OV_COMMIT || o->kind == OV_TAG ||
-	       o->kind == OV_RENAME;
+	       o->kind == OV_TAG_MSG || o->kind == OV_RENAME;
 }
 
 /* Step the byte index back to the start of the previous codepoint. */
