@@ -66,4 +66,19 @@ int gitop_rename(git_ctx *g, const char *oldpath, const char *newpath,
 int gitop_tag(git_ctx *g, const char *name, const char *message, char *err,
               size_t errlen);
 
+/*
+ * Network operations. Queries use libgit2 (in-process); the actual push/pull/
+ * fetch shell out to `git` so the user's credential helpers, SSH config, and
+ * git config all apply. Each fills `msg` with a friendly result (success note
+ * or mapped error) and returns 0 on success, -1 otherwise. `remote` may be NULL
+ * to use the current upstream.
+ */
+bool git_has_upstream(git_ctx *g);
+/* Remote names (heap: each entry and the array; caller frees). */
+char **git_remote_names(git_ctx *g, int *count);
+
+int gitnet_push(git_ctx *g, const char *remote, char *msg, size_t msglen);
+int gitnet_pull(git_ctx *g, const char *remote, char *msg, size_t msglen);
+int gitnet_fetch(git_ctx *g, const char *remote, char *msg, size_t msglen);
+
 #endif /* FUSSY_GIT_H */

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "proc.h"
 #include "util.h"
 
 /* libgit2 is reference-counted; init on first open, shutdown on last close. */
@@ -476,4 +477,120 @@ int gitop_tag(git_ctx *g, const char *name, const char *message, char *err,
 		return -1;
 	}
 	return 0;
+}
+
+/* ---- network operations -------------------------------------------------- */
+
+bool git_has_upstream(git_ctx *g)
+{
+	git_reference *head = NULL;
+	bool has = false;
+	if (git_repository_head(&head, g->repo) == 0) {
+		git_reference *up = NULL;
+		if (git_branch_upstream(&up, head) == 0) {
+			has = true;
+			git_reference_free(up);
+		}
+		git_reference_free(head);
+	}
+	return has;
+}
+
+char **git_remote_names(git_ctx *g, int *count)
+{
+	git_strarray rs = {0};
+	if (git_remote_list(&rs, g->repo) != 0 || rs.count == 0) {
+		git_strarray_dispose(&rs);
+		*count = 0;
+		return NULL;
+	}
+	char **out = xmalloc(rs.count * sizeof(*out));
+	for (size_t i = 0; i < rs.count; i++)
+		out[i] = xstrdup(rs.strings[i]);
+	*count = (int)rs.count;
+	git_strarray_dispose(&rs);
+	return out;
+}
+
+/* Copy the first non-empty line of `s` into msg. */
+static void first_line(const char *s, char *msg, size_t msglen)
+{
+	while (*s == '\n' || *s == '\r')
+		s++;
+	size_t n = 0;
+	while (s[n] != '\0' && s[n] != '\n' && s[n] != '\r')
+		n++;
+	if (n >= msglen)
+		n = msglen - 1;
+	memcpy(msg, s, n);
+	msg[n] = '\0';
+}
+
+/* Turn a git failure into a short, actionable message. */
+static void net_message(int rc, const char *out, const char *err,
+                        const char *ok, char *msg, size_t msglen)
+{
+	if (rc == 0) {
+		snprintf(msg, msglen, "%s", ok);
+		return;
+	}
+	if (strstr(err, "no upstream") || strstr(err, "has no upstream"))
+		snprintf(msg, msglen, "no upstream set");
+	else if (strstr(err, "Could not read from remote") ||
+	         strstr(err, "Could not resolve host") ||
+	         strstr(err, "Connection"))
+		snprintf(msg, msglen, "cannot reach remote");
+	else if (strstr(err, "rejected") || strstr(err, "non-fast-forward"))
+		snprintf(msg, msglen, "rejected; pull first");
+	else if (strstr(err, "Authentication") ||
+	         strstr(err, "Permission denied"))
+		snprintf(msg, msglen, "authentication failed");
+	else if (err[0] != '\0')
+		first_line(err, msg, msglen);
+	else if (out[0] != '\0')
+		first_line(out, msg, msglen);
+	else
+		snprintf(msg, msglen, "failed");
+}
+
+static int run_git(char *const argv[], const char *ok, char *msg, size_t msglen)
+{
+	char *out = NULL, *err = NULL;
+	int rc = proc_run(argv, &out, &err);
+	net_message(rc, out, err, ok, msg, msglen);
+	free(out);
+	free(err);
+	return rc == 0 ? 0 : -1;
+}
+
+int gitnet_push(git_ctx *g, const char *remote, char *msg, size_t msglen)
+{
+	if (remote != NULL) { /* first push: set the upstream */
+		char *argv[] = {"git",          "push",    "-u",
+		                (char *)remote, g->branch, NULL};
+		return run_git(argv, "pushed", msg, msglen);
+	}
+	char *argv[] = {"git", "push", NULL};
+	return run_git(argv, "pushed", msg, msglen);
+}
+
+int gitnet_pull(git_ctx *g, const char *remote, char *msg, size_t msglen)
+{
+	if (remote != NULL) {
+		char *argv[] = {"git", "pull", (char *)remote, g->branch, NULL};
+		return run_git(argv, "pulled", msg, msglen);
+	}
+	char *argv[] = {"git", "pull", NULL};
+	return run_git(argv, "pulled", msg, msglen);
+}
+
+int gitnet_fetch(git_ctx *g, const char *remote, char *msg, size_t msglen)
+{
+	(void)g;
+	if (remote != NULL) {
+		char *argv[] = {"git", "fetch", (char *)remote, NULL};
+		return run_git(argv, "fetched", msg, msglen);
+	}
+	char *argv[] = {"git", "fetch", NULL};
+	return run_git(argv, "fetched", msg, msglen);
 }
