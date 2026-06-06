@@ -1227,3 +1227,130 @@ int gitop_revert(git_ctx *g, const char *rev, char *err, size_t errlen)
 	git_repository_state_cleanup(g->repo);
 	return rc;
 }
+
+/* ---- merge ----------------------------------------------------------------
+ */
+
+int gitop_merge(git_ctx *g, const char *branch, char *err, size_t errlen)
+{
+	git_repository *repo = g->repo;
+
+	git_reference *ref = NULL;
+	if (git_branch_lookup(&ref, repo, branch, GIT_BRANCH_LOCAL) != 0) {
+		copy_err(err, errlen, "no such branch");
+		return -1;
+	}
+	git_annotated_commit *their = NULL;
+	int rc = git_annotated_commit_from_ref(&their, repo, ref);
+	git_reference_free(ref);
+	if (rc != 0) {
+		copy_err(err, errlen, "merge setup failed");
+		return -1;
+	}
+	git_oid their_oid = *git_annotated_commit_id(their);
+
+	git_merge_analysis_t analysis;
+	git_merge_preference_t pref;
+	const git_annotated_commit *heads[1] = {their};
+	if (git_merge_analysis(&analysis, &pref, repo, heads, 1) != 0) {
+		git_annotated_commit_free(their);
+		copy_err(err, errlen, "merge analysis failed");
+		return -1;
+	}
+
+	if (analysis & GIT_MERGE_ANALYSIS_UP_TO_DATE) {
+		git_annotated_commit_free(their);
+		copy_err(err, errlen, "already up to date");
+		return -1;
+	}
+
+	git_checkout_options co;
+	git_checkout_options_init(&co, GIT_CHECKOUT_OPTIONS_VERSION);
+	co.checkout_strategy = GIT_CHECKOUT_SAFE;
+
+	if (analysis & GIT_MERGE_ANALYSIS_FASTFORWARD) {
+		git_object *target = NULL;
+		rc = git_object_lookup(&target, repo, &their_oid,
+		                       GIT_OBJECT_COMMIT);
+		if (rc == 0)
+			rc = git_checkout_tree(repo, target, &co);
+		if (rc == 0) {
+			git_reference *head = NULL;
+			if (git_repository_head(&head, repo) == 0) {
+				git_reference *newref = NULL;
+				rc = git_reference_set_target(
+				    &newref, head, &their_oid,
+				    "merge: fast-forward");
+				git_reference_free(newref);
+				git_reference_free(head);
+			}
+		}
+		git_object_free(target);
+		git_annotated_commit_free(their);
+		if (rc != 0) {
+			copy_err(err, errlen, "fast-forward failed");
+			return -1;
+		}
+		return 0;
+	}
+
+	/* Normal merge: apply, then commit with two parents (or abort). */
+	git_merge_options mo;
+	git_merge_options_init(&mo, GIT_MERGE_OPTIONS_VERSION);
+	rc = git_merge(repo, heads, 1, &mo, &co);
+	git_annotated_commit_free(their);
+	if (rc != 0) {
+		abort_to_head(repo);
+		copy_err(err, errlen, "merge failed");
+		return -1;
+	}
+
+	git_index *idx = NULL;
+	if (git_repository_index(&idx, repo) != 0) {
+		abort_to_head(repo);
+		copy_err(err, errlen, "open index failed");
+		return -1;
+	}
+	if (git_index_has_conflicts(idx) != 0) {
+		git_index_free(idx);
+		abort_to_head(repo);
+		copy_err(err, errlen, "merge conflicts (aborted)");
+		return -1;
+	}
+	git_oid tree_oid;
+	rc = git_index_write_tree(&tree_oid, idx);
+	git_index_free(idx);
+
+	git_tree *tree = NULL;
+	git_reference *head = NULL;
+	git_commit *p1 = NULL, *p2 = NULL;
+	git_signature *sig = NULL;
+	if (rc == 0 && git_tree_lookup(&tree, repo, &tree_oid) == 0 &&
+	    git_repository_head(&head, repo) == 0 &&
+	    git_reference_peel((git_object **)&p1, head, GIT_OBJECT_COMMIT) ==
+	        0 &&
+	    git_commit_lookup(&p2, repo, &their_oid) == 0 &&
+	    git_signature_default(&sig, repo) == 0) {
+		char msg[160];
+		snprintf(msg, sizeof(msg), "Merge branch '%s'", branch);
+		const git_commit *parents[2] = {p1, p2};
+		git_oid commit_oid;
+		rc = git_commit_create(&commit_oid, repo, "HEAD", sig, sig,
+		                       NULL, msg, tree, 2, parents);
+	} else {
+		rc = -1;
+	}
+	git_reference_free(head);
+	git_tree_free(tree);
+	git_commit_free(p1);
+	git_commit_free(p2);
+	git_signature_free(sig);
+
+	if (rc != 0) {
+		abort_to_head(repo);
+		copy_err(err, errlen, "merge commit failed");
+		return -1;
+	}
+	git_repository_state_cleanup(repo);
+	return 0;
+}

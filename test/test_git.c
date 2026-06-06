@@ -531,6 +531,61 @@ void test_git_cherrypick_revert(void)
 	cleanup(dir);
 }
 
+void test_git_merge(void)
+{
+	if (!have_git()) {
+		fprintf(stderr, "  SKIP test_git_merge (no git CLI)\n");
+		return;
+	}
+
+	char dir[256];
+	temp_dir(dir, sizeof(dir), "gitmrg");
+
+	/* master edits a.txt; side adds b.txt from the same base -> a true
+	 * (non-fast-forward) merge with no conflict. */
+	char cmd[2600];
+	snprintf(cmd, sizeof(cmd),
+	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && "
+	         "git -c init.defaultBranch=master init -q && "
+	         "git config user.email t@t && git config user.name t && "
+	         "printf a > a.txt && git add a.txt && git commit -qm base && "
+	         "git checkout -q -b side && "
+	         "printf b > b.txt && git add b.txt && git commit -qm sideb && "
+	         "git checkout -q master && "
+	         "printf a2 > a.txt && git commit -qam edita",
+	         dir, dir, dir);
+	CHECK(system(cmd) == 0);
+
+	char cwd[2048];
+	CHECK(getcwd(cwd, sizeof(cwd)) != NULL);
+	CHECK(chdir(dir) == 0);
+
+	git_ctx g;
+	char err[256];
+	if (git_open(&g, err, sizeof(err))) {
+		char bpath[320];
+		snprintf(bpath, sizeof(bpath), "%s/b.txt", dir);
+
+		CHECK(gitop_merge(&g, "side", err, sizeof(err)) == 0);
+		CHECK(access(bpath, F_OK) == 0); /* side's b.txt merged in */
+		git_log_list log = git_log(&g, 0);
+		/* base, sideb, edita, merge commit. */
+		CHECK(log.count == 4);
+		if (log.count >= 1)
+			CHECK(strstr(log.lines[0], "Merge branch 'side'") !=
+			      NULL);
+		git_log_free(&log);
+
+		/* Merging an already-merged branch is "up to date". */
+		CHECK(gitop_merge(&g, "side", err, sizeof(err)) != 0);
+
+		git_close(&g);
+	}
+
+	CHECK(chdir(cwd) == 0);
+	cleanup(dir);
+}
+
 void test_git_not_a_repo(void)
 {
 	char dir[256];

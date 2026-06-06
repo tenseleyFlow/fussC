@@ -435,6 +435,66 @@ static void browse_branches(loopctx *L)
 	}
 }
 
+/* Merge browser: pick a local branch (preview = its log), Enter merges it into
+ * HEAD (fast-forward or a merge commit; aborts cleanly on conflict). */
+static void browse_merge(loopctx *L)
+{
+	git_branchlist bl = git_branches(L->g);
+	if (bl.count == 0) {
+		set_status(L->a, "no branches");
+		git_branchlist_free(&bl);
+		return;
+	}
+	struct branch_preview_ctx pc = {.bl = &bl, .color = L->color};
+	picker_spec sp = {.title = "Merge into HEAD",
+	                  .items = bl.display,
+	                  .count = bl.count,
+	                  .preview = branch_preview,
+	                  .preview_ctx = &pc};
+	picker_result r = picker_run(L->s, &sp, L->color);
+	if (r.key == KEY_ENTER && r.index >= 0) {
+		char err[256], msg[160];
+		if (gitop_merge(L->g, bl.names[r.index], err, sizeof(err)) !=
+		    0) {
+			set_status(L->a, err);
+		} else {
+			snprintf(msg, sizeof(msg), "merged %s",
+			         bl.names[r.index]);
+			do_refresh(L);
+			set_status(L->a, msg);
+		}
+	}
+	git_branchlist_free(&bl);
+}
+
+/* Interactive rebase: pick a base commit, then hand off to `git rebase -i`
+ * (which drives $EDITOR); refresh on return. */
+static void browse_rebase(loopctx *L)
+{
+	git_log_list log = git_log(L->g, 5000);
+	if (log.count == 0) {
+		set_status(L->a, "no commits");
+		git_log_free(&log);
+		return;
+	}
+	struct commit_preview_ctx pc = {.log = &log, .color = L->color};
+	picker_spec sp = {.title = "Rebase -i from... (edits commits after it)",
+	                  .items = log.lines,
+	                  .count = log.count,
+	                  .preview = commit_preview,
+	                  .preview_ctx = &pc};
+	picker_result r = picker_run(L->s, &sp, L->color);
+	if (r.key == KEY_ENTER && r.index >= 0) {
+		char q[64], cmd[160];
+		shquote(log.shas[r.index], q, sizeof(q));
+		snprintf(cmd, sizeof(cmd), "git rebase -i %s", q);
+		run_viewer(L, cmd); /* hands the tty to git + $EDITOR */
+		do_refresh(L);
+		set_status(L->a, "rebase finished (or paused - check status)");
+	}
+	git_log_free(&log);
+}
+
 /* Preview for the stash browser: the stash's diff. */
 struct stash_preview_ctx {
 	bool color;
@@ -680,9 +740,11 @@ static void browse_blame(loopctx *L)
  * widget). Scales as browsers are added without spending a key on each. */
 static void browse_menu(loopctx *L)
 {
-	char *items[] = {
-	    "Commits", "Reflog",      "Branches", "Stashes",
-	    "Reset",   "Cherry-pick", "Revert",   "Blame current file"};
+	char *items[] = {"Commits",   "Reflog",
+	                 "Branches",  "Stashes",
+	                 "Reset",     "Cherry-pick",
+	                 "Revert",    "Merge",
+	                 "Rebase -i", "Blame current file"};
 	picker_spec sp = {.title = "Browse",
 	                  .items = items,
 	                  .count = (int)(sizeof(items) / sizeof(*items))};
@@ -712,6 +774,12 @@ static void browse_menu(loopctx *L)
 		browse_revert(L);
 		break;
 	case 7:
+		browse_merge(L);
+		break;
+	case 8:
+		browse_rebase(L);
+		break;
+	case 9:
 		browse_blame(L);
 		break;
 	default:

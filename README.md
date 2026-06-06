@@ -49,12 +49,13 @@ P push         L pull           F fetch     B log
 ```
 
 `B` opens the browse menu (Commits, Reflog, Branches, Stashes, Reset, Cherry-pick,
-Revert, Blame): pick one for a fuzzy list with a preview pane. Type to filter,
-`Left`/`Right` scroll the preview. Reset picks a commit then a mode
+Revert, Merge, Rebase -i, Blame): pick one for a fuzzy list with a preview pane.
+Type to filter, `Left`/`Right` scroll the preview. Reset picks a commit then a mode
 (mixed/soft/hard); a hard reset asks to confirm. Cherry-pick (from any branch) and
-Revert apply the commit and commit the result, aborting cleanly on conflict. Blame
-annotates the selected file (age-colored) in the pager - select the file first (use
-`--all` to reach committed files). For
+Revert apply the commit and commit the result, aborting cleanly on conflict. Merge
+fast-forwards or makes a merge commit. Rebase -i picks a base and hands off to `git
+rebase -i` in `$EDITOR`. Blame annotates the selected file (age-colored) in the
+pager - select the file first (use `--all` to reach committed files). For
 Commits/Reflog, Enter opens the selection in the built-in pager; for Branches,
 Enter checks it out (refused if it would clobber uncommitted changes), `Ctrl-A`
 creates a branch, `Ctrl-D` deletes the selected one (refused if unmerged); for

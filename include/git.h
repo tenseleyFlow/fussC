@@ -125,6 +125,12 @@ int gitop_reset(git_ctx *g, const char *rev, int mode, char *err,
 int gitop_cherrypick(git_ctx *g, const char *rev, char *err, size_t errlen);
 int gitop_revert(git_ctx *g, const char *rev, char *err, size_t errlen);
 
+/* Merge local branch `branch` into HEAD: fast-forwards when possible, else
+ * makes a merge commit; aborts to a clean state on conflict. Returns 0 on
+ * success (incl. fast-forward), or -1 with a message (incl. "already up to
+ * date"). */
+int gitop_merge(git_ctx *g, const char *branch, char *err, size_t errlen);
+
 /*
  * Local mutations, all libgit2 in-process so the index is touched by ONE
  * mechanism (fixing fussr's libgit2/subprocess split). Each returns 0 on
