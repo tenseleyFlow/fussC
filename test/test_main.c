@@ -80,6 +80,13 @@ void test_proc_large_output(void);
 void test_proc_spawn_failure(void);
 void test_gitnet_push_fetch_pull(void);
 void test_gitnet_missing_git(void);
+void test_picker_filter_empty_query(void);
+void test_picker_filter_subsequence(void);
+void test_picker_filter_ranks_best_first(void);
+void test_picker_filter_no_match(void);
+void test_render_picker_frame_layout(void);
+void test_render_picker_frame_no_matches(void);
+void test_render_picker_frame_tiny(void);
 
 int main(void)
 {
@@ -159,6 +166,13 @@ int main(void)
 	RUN(test_proc_spawn_failure);
 	RUN(test_gitnet_push_fetch_pull);
 	RUN(test_gitnet_missing_git);
+	RUN(test_picker_filter_empty_query);
+	RUN(test_picker_filter_subsequence);
+	RUN(test_picker_filter_ranks_best_first);
+	RUN(test_picker_filter_no_match);
+	RUN(test_render_picker_frame_layout);
+	RUN(test_render_picker_frame_no_matches);
+	RUN(test_render_picker_frame_tiny);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);

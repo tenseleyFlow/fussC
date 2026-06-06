@@ -48,7 +48,7 @@ BIN      = fussy
 # Object lists are explicit (no wildcard) so BSD make and GNU make agree.
 LIBOBJS  = src/term.o src/util.o src/tree.o src/flatten.o src/git.o \
            src/render.o src/width.o src/app.o src/input.o src/fuzzy.o src/overlay.o src/proc.o \
-           src/strbuf.o
+           src/strbuf.o src/picker.o
 OBJS     = src/main.o $(LIBOBJS)
 
 TESTBIN  = test/run
@@ -58,14 +58,14 @@ TESTOBJS = test/test_main.o test/test_util.o test/test_status.o \
            test/test_nav.o test/test_irender.o test/test_input.o \
            test/test_fuzzy.o test/test_fuzzy_engine.o test/test_git_ops.o \
            test/test_overlay.o test/test_proc.o test/test_gitnet.o \
-           test/test_e2e.o
+           test/test_e2e.o test/test_picker.o
 
 # Headers listed explicitly (same reason as the object lists). The per-object
 # rules near the end pin each object to all of them.
 HEADERS  = include/app.h include/flatten.h include/fussy.h include/fuzzy.h \
            include/git.h include/input.h include/overlay.h include/proc.h \
-           include/render.h include/status.h include/strbuf.h include/term.h \
-           include/tree.h include/util.h include/width.h test/test.h
+           include/picker.h include/render.h include/status.h include/strbuf.h \
+           include/term.h include/tree.h include/util.h include/width.h test/test.h
 
 .SUFFIXES: .c .o
 .c.o:
@@ -141,6 +141,7 @@ src/fuzzy.o: src/fuzzy.c $(HEADERS)
 src/overlay.o: src/overlay.c $(HEADERS)
 src/proc.o: src/proc.c $(HEADERS)
 src/strbuf.o: src/strbuf.c $(HEADERS)
+src/picker.o: src/picker.c $(HEADERS)
 test/test_main.o: test/test_main.c $(HEADERS)
 test/test_util.o: test/test_util.c $(HEADERS)
 test/test_status.o: test/test_status.c $(HEADERS)
@@ -160,3 +161,4 @@ test/test_overlay.o: test/test_overlay.c $(HEADERS)
 test/test_proc.o: test/test_proc.c $(HEADERS)
 test/test_gitnet.o: test/test_gitnet.c $(HEADERS)
 test/test_e2e.o: test/test_e2e.c $(HEADERS)
+test/test_picker.o: test/test_picker.c $(HEADERS)
