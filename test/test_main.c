@@ -34,6 +34,7 @@ void test_width_ascii(void);
 void test_width_wide(void);
 void test_width_combining(void);
 void test_utf8_decode(void);
+void test_wrap_ansi(void);
 void test_key_arrows(void);
 void test_key_lone_esc(void);
 void test_key_controls(void);
@@ -124,6 +125,7 @@ int main(void)
 	RUN(test_width_wide);
 	RUN(test_width_combining);
 	RUN(test_utf8_decode);
+	RUN(test_wrap_ansi);
 	RUN(test_key_arrows);
 	RUN(test_key_lone_esc);
 	RUN(test_key_controls);

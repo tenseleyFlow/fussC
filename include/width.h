@@ -34,4 +34,11 @@ char *clip_to_width(const char *in, int cols);
  * so the visible window keeps the color state it would have had. */
 char *clip_to_width_off(const char *in, int off, int width);
 
+/* Wrap one logical line into segments of at most `width` display columns,
+ * SGR-aware: each continuation segment restates the active color so a colored
+ * line keeps its color across the wrap, and each segment ends with a reset.
+ * Returns a heap array of `*n_out` segment strings (always >= 1; an empty line
+ * yields one segment). Caller frees each segment and the array. */
+char **wrap_ansi(const char *line, int width, int *n_out);
+
 #endif /* FUSSY_WIDTH_H */

@@ -10,8 +10,11 @@ Status: early development. See `.docs/plan.md` for the roadmap.
 ## Building
 
 Requires a C11 compiler, `libgit2`, and POSIX threads. Works with `make` or `gmake`.
+The full-screen commit viewer uses [paige](https://github.com/tenseleyFlow/paige), a
+bundled submodule, so clone recursively (or init it after the fact):
 
 ```sh
+git clone --recursive <repo>          # or: git submodule update --init
 make                 # build the dev binary
 ./fussy
 make test            # build and run the test suite

@@ -69,3 +69,36 @@ int utf8_encode(uint32_t cp, char out[4])
 	out[3] = (char)(0x80 | (cp & 0x3F));
 	return 4;
 }
+
+char **str_split_lines(const char *text, int *n_out)
+{
+	char **lines = NULL;
+	int n = 0, cap = 0;
+	const char *p = text;
+	while (*p != '\0') {
+		const char *nl = strchr(p, '\n');
+		size_t len = nl ? (size_t)(nl - p) : strlen(p);
+		if (len > 0 && p[len - 1] == '\r')
+			len--;
+		if (n == cap) {
+			cap = cap ? cap * 2 : 16;
+			lines = xrealloc(lines, (size_t)cap * sizeof(*lines));
+		}
+		char *line = xmalloc(len + 1);
+		memcpy(line, p, len);
+		line[len] = '\0';
+		lines[n++] = line;
+		if (!nl)
+			break;
+		p = nl + 1;
+	}
+	*n_out = n;
+	return lines;
+}
+
+void str_free_lines(char **lines, int n)
+{
+	for (int i = 0; i < n; i++)
+		free(lines[i]);
+	free(lines);
+}

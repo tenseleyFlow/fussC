@@ -1,6 +1,7 @@
 #include "test.h"
 #include "width.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 void test_width_ascii(void)
@@ -39,4 +40,36 @@ void test_utf8_decode(void)
 
 	/* Truncated lead byte: consumes 1, no over-read past NUL. */
 	CHECK(utf8_decode("\344", &cp) == 1);
+}
+
+void test_wrap_ansi(void)
+{
+	int n = 0;
+
+	/* Plain line splits into ceil(len/width) segments, content preserved.
+	 */
+	char **s = wrap_ansi("abcdefgh", 3, &n);
+	CHECK(n == 3);
+	CHECK(strstr(s[0], "abc") != NULL);
+	CHECK(strstr(s[1], "def") != NULL);
+	CHECK(strstr(s[2], "gh") != NULL);
+	for (int i = 0; i < n; i++)
+		free(s[i]);
+	free(s);
+
+	/* Empty line yields exactly one segment. */
+	char **e = wrap_ansi("", 10, &n);
+	CHECK(n == 1);
+	free(e[0]);
+	free(e);
+
+	/* A color set before a wrap is restated on the continuation segment so
+	 * the second row stays colored. */
+	char **c = wrap_ansi("\033[32m++++++", 3, &n);
+	CHECK(n == 2);
+	CHECK(strstr(c[0], "\033[32m") != NULL); /* color on row 1 */
+	CHECK(strstr(c[1], "\033[32m") != NULL); /* restated on row 2 */
+	for (int i = 0; i < n; i++)
+		free(c[i]);
+	free(c);
 }

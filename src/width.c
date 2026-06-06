@@ -1,6 +1,7 @@
 #include "width.h"
 
 #include <stdbool.h>
+#include <stdlib.h>
 
 #include "strbuf.h"
 #include "util.h"
@@ -140,4 +141,69 @@ char *clip_to_width_off(const char *in, int off, int width)
 char *clip_to_width(const char *in, int cols)
 {
 	return clip_to_width_off(in, 0, cols);
+}
+
+char **wrap_ansi(const char *line, int width, int *n_out)
+{
+	if (width < 1)
+		width = 1;
+	char **out = NULL;
+	int n = 0, cap = 0;
+	strbuf active = {
+	    0}; /* SGR codes seen so far, restated per continuation */
+	strbuf seg = {0};
+	int segw = 0; /* visible width of the current segment */
+	const char *p = line;
+
+	while (*p != '\0') {
+		if (*p == 0x1B) { /* SGR: keep in the segment and remember it */
+			const char *start = p;
+			sb_putc(&seg, *p++);
+			if (*p == '[') {
+				sb_putc(&seg, *p++);
+				while (*p && !(*p >= '@' && *p <= '~'))
+					sb_putc(&seg, *p++);
+				if (*p)
+					sb_putc(&seg, *p++);
+			}
+			sb_putn(&active, start, (size_t)(p - start));
+			continue;
+		}
+		uint32_t cp;
+		int nb = utf8_decode(p, &cp);
+		int cw = cp_width(cp);
+		if (segw + cw > width) { /* flush, then restate color */
+			sb_put(&seg, "\033[0m");
+			if (n == cap) {
+				cap = cap ? cap * 2 : 8;
+				out = xrealloc(out, (size_t)cap * sizeof(*out));
+			}
+			out[n++] = seg.buf ? seg.buf : xstrdup("");
+			seg.buf = NULL;
+			seg.len = 0;
+			seg.cap = 0;
+			segw = 0;
+			if (active.len > 0)
+				sb_putn(&seg, active.buf, active.len);
+		}
+		for (int i = 0; i < nb; i++)
+			sb_putc(&seg, p[i]);
+		segw += cw;
+		p += nb;
+	}
+
+	if (segw > 0 || n == 0) { /* final (or only) segment */
+		sb_put(&seg, "\033[0m");
+		if (n == cap) {
+			cap = cap ? cap * 2 : 8;
+			out = xrealloc(out, (size_t)cap * sizeof(*out));
+		}
+		out[n++] = seg.buf ? seg.buf : xstrdup("");
+		seg.buf = NULL;
+	} else {
+		free(seg.buf);
+	}
+	free(active.buf);
+	*n_out = n;
+	return out;
 }

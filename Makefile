@@ -33,7 +33,12 @@ STRIP   ?= strip
 # defining _POSIX_C_SOURCE, which would otherwise hide those BSD extensions.
 CSTD     = -std=c11 -D_DEFAULT_SOURCE
 WARN     = -Wall -Wextra -Werror
-CFLAGS   = $(CSTD) $(WARN) $(OPT) $(DBG) -Iinclude -Itest
+CFLAGS   = $(CSTD) $(WARN) $(OPT) $(DBG) -Iinclude -Itest -Ipaige/include
+
+# paige is a git submodule (a bespoke pager engine) built by its own portable
+# Makefile into a static lib; we link it into fussy for the full-screen commit
+# view. Built via sub-make so paige owns its own flags/feature macros.
+PAIGE_LIB = paige/build/libpaige.a
 
 # libgit2 flags are resolved by the shell at recipe time (backticks), which both
 # BSD make and GNU make pass through verbatim - unlike $(shell ...)/!= which are
@@ -73,8 +78,11 @@ HEADERS  = include/app.h include/flatten.h include/fussy.h include/fuzzy.h \
 
 all: $(BIN)
 
-$(BIN): $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(GIT2_LIBS) $(LDLIBS)
+$(BIN): $(OBJS) $(PAIGE_LIB)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(PAIGE_LIB) $(GIT2_LIBS) $(LDLIBS)
+
+$(PAIGE_LIB): paige/include/paige.h paige/Makefile
+	$(MAKE) -C paige build/libpaige.a
 
 test: $(TESTBIN)
 	./$(TESTBIN)
@@ -107,6 +115,7 @@ fuzz/fuzz_key: $(KEY_SRC)
 
 clean:
 	rm -f $(BIN) $(OBJS) $(TESTBIN) $(TESTOBJS) $(FUZZERS)
+	-$(MAKE) -C paige clean
 
 # Clean optimized stripped binary. RELOPT/STRIP are overridable so packagers
 # can inject their own flags or skip stripping (STRIP=: keeps symbols).
@@ -129,7 +138,7 @@ uninstall:
 # (every object vs every header) but correct and portable: each line names its
 # source so both makes still apply the .c.o rule. A bare `obj: $(HEADERS)`
 # drops the source prereq and breaks the implicit rule.
-src/main.o: src/main.c $(HEADERS)
+src/main.o: src/main.c $(HEADERS) paige/include/paige.h
 src/term.o: src/term.c $(HEADERS)
 src/util.o: src/util.c $(HEADERS)
 src/tree.o: src/tree.c $(HEADERS)

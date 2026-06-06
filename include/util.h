@@ -29,4 +29,10 @@ uint64_t mono_ns(void);
 /* Encode a codepoint as UTF-8 into out[0..3]; returns the byte count (1-4). */
 int utf8_encode(uint32_t cp, char out[4]);
 
+/* Split `text` into heap line strings on '\n' (a trailing '\r' is trimmed);
+ * *n_out gets the count. An empty input yields zero lines. Free with
+ * str_free_lines. */
+char **str_split_lines(const char *text, int *n_out);
+void str_free_lines(char **lines, int n);
+
 #endif /* FUSSY_UTIL_H */

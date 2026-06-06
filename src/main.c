@@ -4,12 +4,14 @@
 #include "fuzzy.h"
 #include "git.h"
 #include "input.h"
+#include "paige.h"
 #include "picker.h"
 #include "proc.h"
 #include "render.h"
 #include "term.h"
 #include "tree.h"
 #include "util.h"
+#include "width.h"
 
 #include <errno.h>
 #include <poll.h>
@@ -258,8 +260,57 @@ static char *commit_preview(void *vctx, int item)
 	return out;
 }
 
+/* paige document over captured `git show` output: each logical line is wrapped
+ * to the pane width (SGR-aware) and emitted as segments. */
+struct show_doc {
+	char **lines;
+	int count;
+};
+
+static int show_render_line(void *ctx, size_t lineno, int width,
+                            paige_sink *sink)
+{
+	struct show_doc *d = ctx;
+	if (lineno >= (size_t)d->count)
+		return 0;
+	int nseg = 0;
+	char **segs = wrap_ansi(d->lines[lineno], width, &nseg);
+	for (int i = 0; i < nseg; i++) {
+		paige_emit(sink, segs[i], strlen(segs[i]));
+		free(segs[i]);
+	}
+	free(segs);
+	return nseg;
+}
+
+/* Show one commit in paige (our bespoke pager): wrapping + color preserved. */
+static void show_commit(loopctx *L, const char *sha)
+{
+	char *cflag = L->color ? "--color=always" : "--color=never";
+	char *argv[] = {"git", "show", cflag, (char *)sha, NULL};
+	char *out = NULL, *err = NULL;
+	int rc = proc_run(argv, &out, &err);
+	free(err);
+	if (rc == 0 && out != NULL) {
+		int nlines = 0;
+		char **lines = str_split_lines(out, &nlines);
+		struct show_doc d = {lines, nlines};
+		paige_doc doc = {0};
+		doc.ctx = &d;
+		doc.render_line = show_render_line;
+		doc.title = "git show";
+		paige_opts opts = {0};
+		term_restore(); /* hand the tty to paige */
+		paige_run(&doc, &opts);
+		term_resume();
+		screen_invalidate(L->s);
+		str_free_lines(lines, nlines);
+	}
+	free(out);
+}
+
 /* Commit-history browser: a picker over the revwalk with a `git show` preview;
- * Enter opens the chosen commit in the pager. */
+ * Enter opens the chosen commit in paige. */
 static void browse_commits(loopctx *L)
 {
 	git_log_list log = git_log(L->g, 5000);
@@ -275,15 +326,8 @@ static void browse_commits(loopctx *L)
 	                  .preview = commit_preview,
 	                  .preview_ctx = &pc};
 	int chosen = picker_run(L->s, &sp, L->color);
-	if (chosen >= 0) {
-		char q[64], cmd[200];
-		shquote(log.shas[chosen], q, sizeof(q));
-		/* Let git drive its own pager: it sets LESS=FRX (so even a
-		 * plain PAGER=less shows color) and gates color on a tty - no
-		 * raw ESC leaking into a pager that lacks -R. */
-		snprintf(cmd, sizeof(cmd), "git show %s", q);
-		run_viewer(L, cmd);
-	}
+	if (chosen >= 0)
+		show_commit(L, log.shas[chosen]);
 	git_log_free(&log);
 }
 

@@ -256,41 +256,6 @@ char **render_picker_frame(const picker_view *v, int rows, int cols, bool color)
 	return lines;
 }
 
-/* Split `text` into heap line strings on '\n' (a trailing '\r' is trimmed).
- * *n_out gets the count; caller frees each line and the array. */
-static char **split_lines(const char *text, int *n_out)
-{
-	char **lines = NULL;
-	int n = 0, cap = 0;
-	const char *p = text;
-	while (*p != '\0') {
-		const char *nl = strchr(p, '\n');
-		size_t len = nl ? (size_t)(nl - p) : strlen(p);
-		if (len > 0 && p[len - 1] == '\r')
-			len--;
-		if (n == cap) {
-			cap = cap ? cap * 2 : 16;
-			lines = xrealloc(lines, (size_t)cap * sizeof(*lines));
-		}
-		char *line = xmalloc(len + 1);
-		memcpy(line, p, len);
-		line[len] = '\0';
-		lines[n++] = line;
-		if (!nl)
-			break;
-		p = nl + 1;
-	}
-	*n_out = n;
-	return lines;
-}
-
-static void free_lines(char **lines, int n)
-{
-	for (int i = 0; i < n; i++)
-		free(lines[i]);
-	free(lines);
-}
-
 int picker_run(screen *s, const picker_spec *spec, bool color)
 {
 	screen_invalidate(s); /* we own the screen now: full paint */
@@ -316,7 +281,7 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 	while (running) {
 		int cur_item = mcount > 0 ? matches[sel] : -1;
 		if (spec->preview && cur_item != preview_item) {
-			free_lines(pv, pv_count);
+			str_free_lines(pv, pv_count);
 			pv = NULL;
 			pv_count = 0;
 			pv_maxw = 0;
@@ -326,7 +291,7 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 				char *txt =
 				    spec->preview(spec->preview_ctx, cur_item);
 				if (txt) {
-					pv = split_lines(txt, &pv_count);
+					pv = str_split_lines(txt, &pv_count);
 					free(txt);
 					for (int i = 0; i < pv_count; i++) {
 						int w =
@@ -423,7 +388,7 @@ int picker_run(screen *s, const picker_spec *spec, bool color)
 		}
 	}
 
-	free_lines(pv, pv_count);
+	str_free_lines(pv, pv_count);
 	free(matches);
 	screen_invalidate(s); /* caller repaints its own view next */
 	return result;
