@@ -1,7 +1,12 @@
+#include "flatten.h"
 #include "fussy.h"
+#include "git.h"
+#include "render.h"
 #include "term.h"
+#include "tree.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -16,6 +21,38 @@ static void print_usage(FILE *out)
 	    "  -h, --help     show this help and exit\n"
 	    "  -V, --version  show version and exit\n",
 	    FUSSY_NAME);
+}
+
+/* Non-interactive tree output. */
+static int run_print(bool all)
+{
+	git_ctx g;
+	char err[256];
+	if (!git_open(&g, err, sizeof(err))) {
+		fprintf(stderr, "%s: %s\n", FUSSY_NAME, err);
+		return 1;
+	}
+
+	tree t;
+	tree_init(&t);
+	if (git_load_tree(&g, &t, all) != 0) {
+		fprintf(stderr, "%s: failed to read git status\n", FUSSY_NAME);
+		tree_free(&t);
+		git_close(&g);
+		return 1;
+	}
+
+	flat_list f;
+	flat_init(&f);
+	flatten(&f, &t);
+
+	bool color = isatty(STDOUT_FILENO) && getenv("NO_COLOR") == NULL;
+	render_tree(stdout, &t, &f, color);
+
+	flat_free(&f);
+	tree_free(&t);
+	git_close(&g);
+	return 0;
 }
 
 /* Placeholder interactive screen. The real renderer and event loop arrive in
@@ -41,6 +78,7 @@ static int run_interactive(void)
 int main(int argc, char **argv)
 {
 	bool want_print = false;
+	bool want_all = false;
 
 	for (int i = 1; i < argc; i++) {
 		const char *a = argv[i];
@@ -57,7 +95,7 @@ int main(int argc, char **argv)
 			continue;
 		}
 		if (strcmp(a, "-a") == 0 || strcmp(a, "--all") == 0) {
-			/* parsed in a later sprint */
+			want_all = true;
 			continue;
 		}
 		fprintf(stderr, "%s: unknown option '%s'\n", FUSSY_NAME, a);
@@ -65,12 +103,8 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
-	if (want_print || !isatty(STDIN_FILENO)) {
-		/* Non-interactive tree output lands in the tree-core sprint. */
-		printf("%s %s: print mode not yet implemented\n", FUSSY_NAME,
-		       FUSSY_VERSION);
-		return 0;
-	}
+	if (want_print || !isatty(STDIN_FILENO))
+		return run_print(want_all);
 
 	return run_interactive();
 }

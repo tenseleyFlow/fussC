@@ -16,6 +16,9 @@ void test_flatten_collapsed(void);
 void test_flatten_empty(void);
 void test_git_status(void);
 void test_git_not_a_repo(void);
+void test_render_golden(void);
+void test_render_pipe_gutter(void);
+void test_render_color(void);
 
 int main(void)
 {
@@ -31,6 +34,9 @@ int main(void)
 	RUN(test_flatten_empty);
 	RUN(test_git_status);
 	RUN(test_git_not_a_repo);
+	RUN(test_render_golden);
+	RUN(test_render_pipe_gutter);
+	RUN(test_render_color);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);
