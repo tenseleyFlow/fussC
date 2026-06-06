@@ -69,8 +69,29 @@ test: $(TESTBIN)
 $(TESTBIN): $(TESTOBJS) $(LIBOBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TESTOBJS) $(LIBOBJS) $(GIT2_LIBS) $(LDLIBS)
 
+# --- fuzzing (clang + libFuzzer only; not part of the portable build) ---------
+# `make fuzz` builds the harnesses; each binary then runs as `./fuzz/fuzz_NAME
+# fuzz/corpus_NAME [-max_total_time=N]`. Recipes use explicit source lists (no
+# $^), so the syntax is fine under both makes even though the toolchain is clang.
+FUZZ_CC    ?= clang
+FUZZ_FLAGS  = -std=c11 -D_DEFAULT_SOURCE -g -O1 \
+              -fsanitize=fuzzer,address,undefined -Iinclude $(GIT2_CFLAGS)
+SCORE_SRC   = fuzz/fuzz_score.c src/fuzzy.c src/tree.c src/util.c src/width.c
+PATH_SRC    = fuzz/fuzz_path.c src/tree.c src/util.c
+KEY_SRC     = fuzz/fuzz_key.c src/term.c
+FUZZERS     = fuzz/fuzz_score fuzz/fuzz_path fuzz/fuzz_key
+
+fuzz: $(FUZZERS)
+
+fuzz/fuzz_score: $(SCORE_SRC)
+	$(FUZZ_CC) $(FUZZ_FLAGS) -o $@ $(SCORE_SRC) -lpthread
+fuzz/fuzz_path: $(PATH_SRC)
+	$(FUZZ_CC) $(FUZZ_FLAGS) -o $@ $(PATH_SRC)
+fuzz/fuzz_key: $(KEY_SRC)
+	$(FUZZ_CC) $(FUZZ_FLAGS) -o $@ $(KEY_SRC)
+
 clean:
-	rm -f $(BIN) $(OBJS) $(TESTBIN) $(TESTOBJS)
+	rm -f $(BIN) $(OBJS) $(TESTBIN) $(TESTOBJS) $(FUZZERS)
 
 # Clean optimized stripped binary. RELOPT/STRIP are overridable so packagers
 # can inject their own flags or skip stripping (STRIP=: keeps symbols).
@@ -87,7 +108,7 @@ install: release
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BIN)
 
-.PHONY: all test clean release install uninstall
+.PHONY: all test clean release install uninstall fuzz
 
 # Per-object header deps, after the goals so `all` stays the default. Coarse
 # (every object vs every header) but correct and portable: each line names its

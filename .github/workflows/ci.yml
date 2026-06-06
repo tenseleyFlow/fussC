@@ -130,6 +130,24 @@ jobs:
           valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=definite \
             --suppressions=.github/valgrind.supp ./test/run
 
+  fuzz:
+    name: fuzzers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgit2-dev pkg-config clang
+      - name: Build fuzzers
+        run: make fuzz FUZZ_CC=clang
+      # Bounded run over the committed seed corpora. libFuzzer exits non-zero on
+      # any crash/leak/timeout, which fails the job.
+      - name: Run (bounded)
+        run: |
+          for f in score path key; do
+            echo "== fuzz_$f =="
+            ./fuzz/fuzz_$f fuzz/corpus_$f -max_total_time=30 -timeout=10
+          done
+
   format:
     name: clang-format
     runs-on: ubuntu-latest

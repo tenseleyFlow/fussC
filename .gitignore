@@ -8,6 +8,15 @@ fussy
 test/run
 compile_commands.json
 
+# Fuzzer binaries and crash artifacts (the corpora ARE committed as seeds)
+fuzz/fuzz_score
+fuzz/fuzz_path
+fuzz/fuzz_key
+crash-*
+leak-*
+timeout-*
+oom-*
+
 # Editor / OS cruft
 *.swp
 *~
