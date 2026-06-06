@@ -16,4 +16,7 @@ char *xstrdup(const char *s);
 /* Monotonic clock in nanoseconds (CLOCK_MONOTONIC), for the filter timeout. */
 uint64_t mono_ns(void);
 
+/* Encode a codepoint as UTF-8 into out[0..3]; returns the byte count (1-4). */
+int utf8_encode(uint32_t cp, char out[4]);
+
 #endif /* FUSSY_UTIL_H */

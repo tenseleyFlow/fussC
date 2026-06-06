@@ -59,6 +59,10 @@ void test_fuzzy_fuzz(void);
 void test_engine_basic(void);
 void test_engine_convergence(void);
 void test_engine_pause_resume(void);
+void test_overlay_commit_edit(void);
+void test_overlay_amend_and_rename_prefill(void);
+void test_overlay_utf8_edit(void);
+void test_overlay_confirm_is_not_editable(void);
 
 int main(void)
 {
@@ -117,6 +121,10 @@ int main(void)
 	RUN(test_engine_basic);
 	RUN(test_engine_convergence);
 	RUN(test_engine_pause_resume);
+	RUN(test_overlay_commit_edit);
+	RUN(test_overlay_amend_and_rename_prefill);
+	RUN(test_overlay_utf8_edit);
+	RUN(test_overlay_confirm_is_not_editable);
 
 	fprintf(stderr, "\n%d checks, %d failures\n", fussy_checks,
 	        fussy_failures);
