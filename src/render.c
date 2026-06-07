@@ -100,7 +100,26 @@ static char *build_header(const char *repo, const char *branch, const app *a,
 	sb_put(&s, branch ? branch : "");
 	if (color)
 		sb_put(&s, "\033[0m");
-	(void)a; /* the live query lives in the footer, not the header */
+
+	/* Sync vs upstream: ahead = unpushed commits (↑), behind = unpulled
+	 * (↓). */
+	char ab[24];
+	if (a->ahead > 0) {
+		snprintf(ab, sizeof(ab), " \342\206\221%d", a->ahead);
+		if (color)
+			sb_put(&s, "\033[32m");
+		sb_put(&s, ab);
+		if (color)
+			sb_put(&s, "\033[0m");
+	}
+	if (a->behind > 0) {
+		snprintf(ab, sizeof(ab), " \342\206\223%d", a->behind);
+		if (color)
+			sb_put(&s, "\033[34m");
+		sb_put(&s, ab);
+		if (color)
+			sb_put(&s, "\033[0m");
+	}
 	return s.buf ? s.buf : xstrdup("");
 }
 
@@ -287,7 +306,19 @@ static void pad_to(strbuf *s, const char *text, int width)
 }
 
 /* The keymap reference, formatted as aligned two-column rows. */
-static char **build_help(int *count)
+/* Append a colored status glyph + a following label to the builder. */
+static void legend_glyph(strbuf *s, bool color, const char *sgr,
+                         const char *glyph, const char *label)
+{
+	if (color)
+		sb_put(s, sgr);
+	sb_put(s, glyph);
+	if (color)
+		sb_put(s, "\033[0m");
+	sb_put(s, label);
+}
+
+static char **build_help(int *count, bool color)
 {
 	static const char *const NAV[][2] = {
 	    {"\342\206\221 / Ctrl-P", "previous sibling"},
@@ -307,7 +338,7 @@ static char **build_help(int *count)
 	int nav_n = (int)(sizeof(NAV) / sizeof(*NAV));
 	int git_n = (int)(sizeof(GIT) / sizeof(*GIT));
 
-	char **lines = xmalloc((size_t)(nav_n + git_n + 4) * sizeof(*lines));
+	char **lines = xmalloc((size_t)(nav_n + git_n + 7) * sizeof(*lines));
 	int n = 0;
 	lines[n++] = xstrdup("Navigation");
 	for (int i = 0; i < nav_n; i++) {
@@ -325,6 +356,30 @@ static char **build_help(int *count)
 		sb_put(&s, GIT[i][1]);
 		lines[n++] = s.buf ? s.buf : xstrdup("");
 	}
+	lines[n++] = xstrdup("Status");
+	{
+		strbuf s = {0};
+		sb_put(&s, "  ");
+		legend_glyph(&s, color, "\033[32m", "\342\206\221",
+		             " staged   ");
+		legend_glyph(&s, color, "\033[31m", "\342\234\227",
+		             " modified   ");
+		legend_glyph(&s, color, "\033[90m", "\342\234\227",
+		             " untracked");
+		lines[n++] = s.buf ? s.buf : xstrdup("");
+	}
+	{
+		strbuf s = {0};
+		sb_put(&s, "  ");
+		legend_glyph(&s, color, "\033[34m", "\342\206\223",
+		             " incoming   ");
+		legend_glyph(&s, color, "\033[90m", "dimmed name",
+		             " = ignored");
+		lines[n++] = s.buf ? s.buf : xstrdup("");
+	}
+	lines[n++] = xstrdup(
+	    "  branch \342\206\221/\342\206\223 = commits to push / pull");
+
 	lines[n++] = xstrdup("Q quit    ? help    Esc cancel");
 	*count = n;
 	return lines;
@@ -344,7 +399,7 @@ static void draw_overlay(char **lines, int rows, int cols, const overlay *o,
 	int ncontent = 0;
 	char **content;
 	if (o->kind == OV_HELP) {
-		content = build_help(&ncontent);
+		content = build_help(&ncontent, color);
 		if (inner < 40)
 			inner = 40; /* keep the aligned columns readable */
 	} else if (o->kind == OV_REMOTE) {

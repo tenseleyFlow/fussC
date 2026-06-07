@@ -32,6 +32,7 @@ typedef struct {
 	    last_input_ns; /* monotonic time of the last filter keystroke */
 	overlay ov;        /* active modal overlay, or OV_NONE */
 	char status[256];  /* transient result message (git op feedback) */
+	int ahead, behind; /* commits vs upstream (for the header indicator) */
 } app;
 
 void app_init(app *a);

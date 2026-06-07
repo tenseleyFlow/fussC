@@ -26,6 +26,32 @@ void test_render_frame_layout(void)
 	app_free(&a);
 }
 
+void test_render_frame_ahead_behind(void)
+{
+	app a;
+	app_init(&a);
+	tree_add(&a.t, "x", ST_STAGED);
+	app_reflatten(&a);
+
+	/* No upstream divergence: header is just repo:branch. */
+	char **f0 = render_frame(&a, "repo", "main", false, 6, 80);
+	CHECK(strstr(f0[0], "repo:main") != NULL);
+	CHECK(strstr(f0[0], "\342\206\221") == NULL); /* no up arrow */
+	free_frame(f0, 6);
+
+	/* 2 ahead, 1 behind -> "↑2" and "↓1" in the header. */
+	a.ahead = 2;
+	a.behind = 1;
+	char **f1 = render_frame(&a, "repo", "main", false, 6, 80);
+	CHECK(strstr(f1[0], "\342\206\221"
+	                    "2") != NULL); /* up arrow 2 */
+	CHECK(strstr(f1[0], "\342\206\223"
+	                    "1") != NULL); /* down arrow 1 */
+	free_frame(f1, 6);
+
+	app_free(&a);
+}
+
 void test_render_frame_degenerate_sizes(void)
 {
 	/* Tiny / zero-sized terminals must not crash or over-read (ASan/UBSan
@@ -142,20 +168,23 @@ void test_render_overlay_help(void)
 	app_reflatten(&a);
 	overlay_open_help(&a.ov);
 
-	char **f = render_frame(&a, "r", "b", false, 24, 70);
-	bool title = false, git = false, close = false;
-	for (int i = 0; i < 24; i++) {
+	char **f = render_frame(&a, "r", "b", false, 28, 70);
+	bool title = false, git = false, status = false, close = false;
+	for (int i = 0; i < 28; i++) {
 		if (strstr(f[i], "Keys"))
 			title = true;
 		if (strstr(f[i], "A stage"))
 			git = true;
+		if (strstr(f[i], "staged") && strstr(f[i], "modified"))
+			status = true; /* the status legend */
 		if (strstr(f[i], "any key to close"))
 			close = true;
 	}
 	CHECK(title);
 	CHECK(git);
+	CHECK(status);
 	CHECK(close);
-	free_frame(f, 24);
+	free_frame(f, 28);
 	app_free(&a);
 }
 

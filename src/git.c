@@ -860,6 +860,30 @@ void git_reload_head(git_ctx *g)
 	}
 }
 
+void git_ahead_behind(git_ctx *g, int *ahead, int *behind)
+{
+	*ahead = 0;
+	*behind = 0;
+	git_reference *head = NULL;
+	if (git_repository_head(&head, g->repo) != 0) /* resolved branch ref */
+		return;
+	git_reference *up = NULL;
+	if (git_branch_upstream(&up, head) == 0) {
+		const git_oid *l = git_reference_target(head);
+		const git_oid *u = git_reference_target(up);
+		if (l != NULL && u != NULL) {
+			size_t a = 0, b = 0;
+			if (git_graph_ahead_behind(&a, &b, g->repo, l, u) ==
+			    0) {
+				*ahead = (int)a;
+				*behind = (int)b;
+			}
+		}
+		git_reference_free(up);
+	}
+	git_reference_free(head);
+}
+
 int gitop_checkout(git_ctx *g, const char *branch, char *err, size_t errlen)
 {
 	git_object *target = NULL;

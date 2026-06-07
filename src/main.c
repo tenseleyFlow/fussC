@@ -123,6 +123,7 @@ static void do_refresh(loopctx *L)
 	if (L->have_repo) {
 		git_load_tree(L->g, &a->t, L->all);
 		git_mark_incoming(L->g, &a->t);
+		git_ahead_behind(L->g, &a->ahead, &a->behind);
 	}
 	app_collapse_paths(a, collapsed, ncol);
 	if (L->eng)
@@ -1161,6 +1162,7 @@ static int run_interactive(bool all)
 	if (have_repo) {
 		git_load_tree(&g, &a.t, all);
 		git_mark_incoming(&g, &a.t);
+		git_ahead_behind(&g, &a.ahead, &a.behind);
 	}
 	app_reflatten(&a);
 

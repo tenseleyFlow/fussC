@@ -79,6 +79,11 @@ void git_branchlist_free(git_branchlist *b);
 /* Re-read HEAD's short branch name into g->branch (after a checkout). */
 void git_reload_head(git_ctx *g);
 
+/* Commits the current branch is ahead/behind its upstream (0/0 when there is no
+ * upstream). `ahead` = local commits not yet pushed; `behind` = upstream
+ * commits not yet pulled. */
+void git_ahead_behind(git_ctx *g, int *ahead, int *behind);
+
 /* Check out a local branch: update the worktree+index to it (refusing if that
  * would clobber uncommitted changes) and move HEAD. 0 on success, else -1 with
  * a terse message. */

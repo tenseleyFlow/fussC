@@ -54,6 +54,7 @@ void test_toggle_matches_oracle(void);
 void test_nav_filter_buffer(void);
 void test_render_frame_layout(void);
 void test_render_frame_empty_clean(void);
+void test_render_frame_ahead_behind(void);
 void test_render_frame_degenerate_sizes(void);
 void test_render_frame_selection(void);
 void test_render_frame_filter_in_footer(void);
@@ -151,6 +152,7 @@ int main(void)
 	RUN(test_nav_filter_buffer);
 	RUN(test_render_frame_layout);
 	RUN(test_render_frame_empty_clean);
+	RUN(test_render_frame_ahead_behind);
 	RUN(test_render_frame_degenerate_sizes);
 	RUN(test_render_frame_selection);
 	RUN(test_render_frame_filter_in_footer);
