@@ -283,30 +283,47 @@ static int show_render_line(void *ctx, size_t lineno, int width,
 	return nseg;
 }
 
+/* Run `argv`, capture its stdout, and page it in paige (wrapping + color). Used
+ * for every read-only view (show / diff / status / blame) so they all use one
+ * pager - no reliance on git's less -F, which would flash-and-quit when the
+ * output fits one screen and our alt-screen re-entry then wiped it. */
+static void page_command(loopctx *L, char *const argv[], const char *title)
+{
+	char *out = NULL, *err = NULL;
+	int rc = proc_run(argv, &out, &err);
+	if (rc != 0 || out == NULL || out[0] == '\0') {
+		char *nl = err ? strchr(err, '\n') : NULL;
+		if (nl)
+			*nl = '\0';
+		set_status(L->a, (err && err[0]) ? err : "(nothing to show)");
+		free(out);
+		free(err);
+		return;
+	}
+	free(err);
+
+	int nlines = 0;
+	char **lines = str_split_lines(out, &nlines);
+	struct show_doc d = {lines, nlines};
+	paige_doc doc = {0};
+	doc.ctx = &d;
+	doc.render_line = show_render_line;
+	doc.title = title;
+	paige_opts opts = {0};
+	term_restore(); /* hand the tty to paige */
+	paige_run(&doc, &opts);
+	term_resume();
+	screen_invalidate(L->s);
+	str_free_lines(lines, nlines);
+	free(out);
+}
+
 /* Show one commit in paige (our bespoke pager): wrapping + color preserved. */
 static void show_commit(loopctx *L, const char *sha)
 {
 	char *cflag = L->color ? "--color=always" : "--color=never";
 	char *argv[] = {"git", "show", cflag, (char *)sha, NULL};
-	char *out = NULL, *err = NULL;
-	int rc = proc_run(argv, &out, &err);
-	free(err);
-	if (rc == 0 && out != NULL) {
-		int nlines = 0;
-		char **lines = str_split_lines(out, &nlines);
-		struct show_doc d = {lines, nlines};
-		paige_doc doc = {0};
-		doc.ctx = &d;
-		doc.render_line = show_render_line;
-		doc.title = "git show";
-		paige_opts opts = {0};
-		term_restore(); /* hand the tty to paige */
-		paige_run(&doc, &opts);
-		term_resume();
-		screen_invalidate(L->s);
-		str_free_lines(lines, nlines);
-	}
-	free(out);
+	page_command(L, argv, "git show");
 }
 
 /* Drive a commit-list picker (commits or reflog): `git show` preview, Enter
@@ -707,33 +724,7 @@ static void browse_blame(loopctx *L)
 	argv[i++] = (char *)path;
 	argv[i] = NULL;
 
-	char *out = NULL, *err = NULL;
-	int rc = proc_run(argv, &out, &err);
-	if (rc != 0 || out == NULL || out[0] == '\0') {
-		char *nl = err ? strchr(err, '\n') : NULL;
-		if (nl)
-			*nl = '\0';
-		set_status(L->a, (err && err[0]) ? err : "blame unavailable");
-		free(out);
-		free(err);
-		return;
-	}
-	free(err);
-
-	int nlines = 0;
-	char **lines = str_split_lines(out, &nlines);
-	struct show_doc d = {lines, nlines};
-	paige_doc doc = {0};
-	doc.ctx = &d;
-	doc.render_line = show_render_line;
-	doc.title = path;
-	paige_opts opts = {0};
-	term_restore();
-	paige_run(&doc, &opts);
-	term_resume();
-	screen_invalidate(L->s);
-	str_free_lines(lines, nlines);
-	free(out);
+	page_command(L, argv, path);
 }
 
 /* The browse menu: a picker over the available browsers (itself reusing the
@@ -837,26 +828,33 @@ static void run_command(loopctx *L, uint32_t letter)
 	case 'F':
 		net_dispatch(L, NET_FETCH);
 		break;
-	case 'G': /* full status in the pager (git drives the pager: LESS=FRX)
-	           */
-		run_viewer(L, "git -c color.status=always --paginate status");
+	case 'G': { /* full status in paige (our pager: no less -F flash) */
+		char *cflag =
+		    L->color ? "color.status=always" : "color.status=never";
+		char *argv[] = {"git", "-c", cflag, "status", NULL};
+		page_command(L, argv, "git status");
 		break;
+	}
 	case 'B': /* browse menu (commits, reflog, ...) */
 		browse_menu(L);
 		break;
-	case 'V': /* view: diff a changed file, else its contents */
+	case 'V': /* view: a changed file's diff in paige, else its contents */
 		if (p) {
-			char q[1100], cmd[1300];
-			shquote(p, q, sizeof(q));
-			if (sel_status(a) & (ST_STAGED | ST_UNSTAGED))
-				/* git auto-pages diff and gates color on a tty.
-				 */
-				snprintf(cmd, sizeof(cmd),
-				         "git diff HEAD -- %s", q);
-			else
+			if (sel_status(a) & (ST_STAGED | ST_UNSTAGED)) {
+				char *cflag = L->color ? "--color=always"
+				                       : "--color=never";
+				char *argv[] = {"git", "diff",    cflag, "HEAD",
+				                "--",  (char *)p, NULL};
+				page_command(L, argv, "git diff");
+			} else {
+				/* Plain file: $PAGER (less -R does not
+				 * -F-flash). */
+				char q[1100], cmd[1300];
+				shquote(p, q, sizeof(q));
 				snprintf(cmd, sizeof(cmd),
 				         "${PAGER:-less -R} %s", q);
-			run_viewer(L, cmd);
+				run_viewer(L, cmd);
+			}
 		}
 		break;
 	case 'R':
