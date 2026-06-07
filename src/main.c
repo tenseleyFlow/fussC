@@ -916,8 +916,8 @@ static void run_command(loopctx *L, uint32_t letter)
 		          "unstaged all");
 		break;
 	case 'W': /* stash all tracked changes (git stash push) */
-		op_result(L, gitop_stash_push(L->g, NULL, err, sizeof(err)),
-		          err, "stashed changes");
+		overlay_open_confirm(&a->ov, "Stash all changes? (y/n)");
+		a->ov.confirm_op = CONF_STASH;
 		break;
 	case 'C':
 		overlay_open_commit(&a->ov, false, NULL);
@@ -1118,12 +1118,16 @@ static void overlay_execute(loopctx *L)
 			                        o->target_untracked, err,
 			                        sizeof(err)),
 			          err, "discarded");
-		else
+		else if (o->confirm_op == CONF_DELETE)
 			op_result(L,
 			          gitop_delete(L->g, o->target,
 			                       o->target_untracked, err,
 			                       sizeof(err)),
 			          err, "deleted");
+		else
+			op_result(
+			    L, gitop_stash_push(L->g, NULL, err, sizeof(err)),
+			    err, "stashed changes");
 		overlay_close(o);
 		break;
 	default:

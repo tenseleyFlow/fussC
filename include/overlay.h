@@ -28,7 +28,7 @@ typedef enum {
 enum { NET_PUSH, NET_PULL, NET_FETCH };
 #define OVERLAY_REMOTES_MAX 8
 
-enum { CONF_DISCARD, CONF_DELETE };
+enum { CONF_DISCARD, CONF_DELETE, CONF_STASH };
 
 typedef struct {
 	overlay_kind kind;
@@ -41,7 +41,7 @@ typedef struct {
 	/* The path being acted on (OV_RENAME: old path; OV_CONFIRM: target). */
 	char target[1024];
 	bool target_untracked; /* OV_CONFIRM: target is untracked */
-	int confirm_op;        /* OV_CONFIRM: CONF_DISCARD or CONF_DELETE */
+	int confirm_op; /* OV_CONFIRM: CONF_DISCARD/CONF_DELETE/CONF_STASH */
 
 	/* OV_REMOTE: choose a remote for a NET_* op. */
 	char remotes[OVERLAY_REMOTES_MAX][64];
