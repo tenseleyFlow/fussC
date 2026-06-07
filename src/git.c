@@ -1226,6 +1226,39 @@ int gitop_cherrypick(git_ctx *g, const char *rev, char *err, size_t errlen)
 	return rc;
 }
 
+int gitop_cherrypick_nocommit(git_ctx *g, const char *rev, char *err,
+                              size_t errlen)
+{
+	git_commit *pick = NULL;
+	if (resolve_commit(g->repo, rev, &pick) != 0) {
+		copy_err(err, errlen, "no such commit");
+		return -1;
+	}
+	int rc = git_cherrypick(g->repo, pick, NULL);
+	git_commit_free(pick);
+	if (rc != 0) {
+		copy_err(err, errlen, "cherry-pick failed");
+		return -1;
+	}
+
+	git_index *idx = NULL;
+	bool conflicts = false;
+	if (git_repository_index(&idx, g->repo) == 0) {
+		conflicts = git_index_has_conflicts(idx) != 0;
+		git_index_free(idx);
+	}
+	if (conflicts) {
+		abort_to_head(g->repo);
+		copy_err(err, errlen, "cherry-pick conflicts (aborted)");
+		return -1;
+	}
+	/* Clear CHERRY_PICK_HEAD so a later commit is a normal one, but keep
+	 * the applied changes staged (state cleanup does not touch the index).
+	 */
+	git_repository_state_cleanup(g->repo);
+	return 0;
+}
+
 int gitop_revert(git_ctx *g, const char *rev, char *err, size_t errlen)
 {
 	git_commit *target = NULL;

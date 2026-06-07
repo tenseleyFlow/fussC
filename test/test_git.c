@@ -530,6 +530,21 @@ void test_git_cherrypick_revert(void)
 			CHECK(strstr(l2.lines[0], "Revert") != NULL);
 		git_log_free(&l2);
 
+		/* Stage-only cherry-pick: applies but does NOT commit; b.txt is
+		 * back and staged, the commit count is unchanged. */
+		CHECK(gitop_cherrypick_nocommit(&g, "side", err, sizeof(err)) ==
+		      0);
+		CHECK(access(bpath, F_OK) == 0);
+		git_log_list l4 = git_log(&g, 0);
+		CHECK(l4.count == 3); /* no new commit */
+		git_log_free(&l4);
+		tree t;
+		tree_init(&t);
+		CHECK(git_load_tree(&g, &t, false) == 0);
+		CHECK(has_bit(&t, "b.txt",
+		              ST_STAGED)); /* staged, not committed */
+		tree_free(&t);
+
 		git_close(&g);
 	}
 

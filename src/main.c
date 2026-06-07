@@ -745,10 +745,49 @@ static void browse_pick_apply(loopctx *L, const char *title, git_log_list log,
 	git_log_free(&log);
 }
 
+/* Cherry-pick: pick a commit (from any branch), then a submodal - commit it now
+ * or just stage it for review (git's -n). */
 static void browse_cherrypick(loopctx *L)
 {
-	browse_pick_apply(L, "Cherry-pick onto HEAD", git_log_all(L->g, 5000),
-	                  gitop_cherrypick, "cherry-picked");
+	git_log_list log = git_log_all(L->g, 5000);
+	if (log.count == 0) {
+		set_status(L->a, "no commits");
+		git_log_free(&log);
+		return;
+	}
+	struct commit_preview_ctx pc = {.log = &log, .color = L->color};
+	picker_spec sp = {.title = "Cherry-pick onto HEAD",
+	                  .items = log.lines,
+	                  .count = log.count,
+	                  .preview = commit_preview,
+	                  .preview_ctx = &pc};
+	picker_result r = picker_run(L->s, &sp, L->color);
+	if (r.key == KEY_ENTER && r.index >= 0) {
+		const char *sha = log.shas[r.index];
+		char *modes[] = {"commit now",
+		                 "stage only (review, then C to commit)"};
+		picker_spec msp = {
+		    .title = "Cherry-pick", .items = modes, .count = 2};
+		picker_result mr = picker_run(L->s, &msp, L->color);
+		if (mr.key == KEY_ENTER && mr.index >= 0) {
+			char err[256];
+			int rc =
+			    mr.index == 0
+			        ? gitop_cherrypick(L->g, sha, err, sizeof(err))
+			        : gitop_cherrypick_nocommit(L->g, sha, err,
+			                                    sizeof(err));
+			if (rc != 0) {
+				set_status(L->a, err);
+			} else {
+				do_refresh(L);
+				set_status(L->a,
+				           mr.index == 0
+				               ? "cherry-picked"
+				               : "cherry-picked (staged)");
+			}
+		}
+	}
+	git_log_free(&log);
 }
 
 static void browse_revert(loopctx *L)

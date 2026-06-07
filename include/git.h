@@ -130,6 +130,12 @@ int gitop_reset(git_ctx *g, const char *rev, int mode, char *err,
 int gitop_cherrypick(git_ctx *g, const char *rev, char *err, size_t errlen);
 int gitop_revert(git_ctx *g, const char *rev, char *err, size_t errlen);
 
+/* Cherry-pick `rev` into the index + worktree but do NOT commit (git's -n):
+ * the changes are left staged for review, ready for a normal commit. Aborts to
+ * a clean state on conflict. 0 on success, else -1 with a message. */
+int gitop_cherrypick_nocommit(git_ctx *g, const char *rev, char *err,
+                              size_t errlen);
+
 /* Merge local branch `branch` into HEAD: fast-forwards when possible, else
  * makes a merge commit; aborts to a clean state on conflict. Returns 0 on
  * success (incl. fast-forward), or -1 with a message (incl. "already up to
