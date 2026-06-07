@@ -318,6 +318,61 @@ static void page_command(loopctx *L, char *const argv[], const char *title)
 	free(out);
 }
 
+/* Read a whole file into a heap buffer (NUL-terminated). Sets *binary when the
+ * content contains a NUL byte. Returns NULL if the file can't be opened. */
+static char *read_file(const char *path, bool *binary)
+{
+	FILE *fp = fopen(path, "rb");
+	if (fp == NULL)
+		return NULL;
+	size_t cap = 4096, len = 0;
+	char *buf = xmalloc(cap);
+	size_t r;
+	while ((r = fread(buf + len, 1, cap - len, fp)) > 0) {
+		len += r;
+		if (len == cap) {
+			cap *= 2;
+			buf = xrealloc(buf, cap);
+		}
+	}
+	fclose(fp);
+	*binary = memchr(buf, 0, len) != NULL;
+	buf[len] = '\0'; /* cap > len always (we grow before filling) */
+	return buf;
+}
+
+/* View a file's contents in paige (so V is paige for both diff and contents).
+ * Binary files are not shown. */
+static void view_file(loopctx *L, const char *path)
+{
+	bool binary = false;
+	char *content = read_file(path, &binary);
+	if (content == NULL) {
+		set_status(L->a, "cannot open file");
+		return;
+	}
+	if (binary) {
+		set_status(L->a, "(binary file - not shown)");
+		free(content);
+		return;
+	}
+
+	int n = 0;
+	char **lines = str_split_lines(content, &n);
+	struct show_doc d = {lines, n};
+	paige_doc doc = {0};
+	doc.ctx = &d;
+	doc.render_line = show_render_line;
+	doc.title = path;
+	paige_opts opts = {0};
+	term_restore();
+	paige_run(&doc, &opts);
+	term_resume();
+	screen_invalidate(L->s);
+	str_free_lines(lines, n);
+	free(content);
+}
+
 /* Show one commit in paige (our bespoke pager): wrapping + color preserved. */
 static void show_commit(loopctx *L, const char *sha)
 {
@@ -838,7 +893,7 @@ static void run_command(loopctx *L, uint32_t letter)
 	case 'B': /* browse menu (commits, reflog, ...) */
 		browse_menu(L);
 		break;
-	case 'V': /* view: a changed file's diff in paige, else its contents */
+	case 'V': /* view in paige: a changed file's diff, else its contents */
 		if (p) {
 			if (sel_status(a) & (ST_STAGED | ST_UNSTAGED)) {
 				char *cflag = L->color ? "--color=always"
@@ -847,13 +902,7 @@ static void run_command(loopctx *L, uint32_t letter)
 				                "--",  (char *)p, NULL};
 				page_command(L, argv, "git diff");
 			} else {
-				/* Plain file: $PAGER (less -R does not
-				 * -F-flash). */
-				char q[1100], cmd[1300];
-				shquote(p, q, sizeof(q));
-				snprintf(cmd, sizeof(cmd),
-				         "${PAGER:-less -R} %s", q);
-				run_viewer(L, cmd);
+				view_file(L, p);
 			}
 		}
 		break;
