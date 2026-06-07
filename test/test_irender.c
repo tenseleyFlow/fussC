@@ -169,12 +169,15 @@ void test_render_overlay_help(void)
 	overlay_open_help(&a.ov);
 
 	char **f = render_frame(&a, "r", "b", false, 28, 70);
-	bool title = false, git = false, status = false, close = false;
+	bool title = false, git = false, stash = false, status = false,
+	     close = false;
 	for (int i = 0; i < 28; i++) {
 		if (strstr(f[i], "Keys"))
 			title = true;
 		if (strstr(f[i], "A stage"))
 			git = true;
+		if (strstr(f[i], "W stash"))
+			stash = true; /* stash-all bind listed */
 		if (strstr(f[i], "staged") && strstr(f[i], "modified"))
 			status = true; /* the status legend */
 		if (strstr(f[i], "any key to close"))
@@ -182,6 +185,7 @@ void test_render_overlay_help(void)
 	}
 	CHECK(title);
 	CHECK(git);
+	CHECK(stash);
 	CHECK(status);
 	CHECK(close);
 	free_frame(f, 28);

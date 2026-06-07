@@ -915,6 +915,10 @@ static void run_command(loopctx *L, uint32_t letter)
 		op_result(L, gitop_unstage_all(L->g, err, sizeof(err)), err,
 		          "unstaged all");
 		break;
+	case 'W': /* stash all tracked changes (git stash push) */
+		op_result(L, gitop_stash_push(L->g, NULL, err, sizeof(err)),
+		          err, "stashed changes");
+		break;
 	case 'C':
 		overlay_open_commit(&a->ov, false, NULL);
 		break;
