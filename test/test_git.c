@@ -159,7 +159,10 @@ void test_git_incoming(void)
 	    "git config user.email t@t && git config user.name t && "
 	    "cd '%s/up' && printf onemore > a.txt && printf two > b.txt && "
 	    "git add -A && git commit -qm upstream && git push -q && "
-	    "cd '%s/work' && git fetch -q",
+	    "cd '%s/work' && git fetch -q && "
+	    /* a local-only commit: its file must NOT be flagged incoming */
+	    "printf mine > local.txt && git add local.txt && "
+	    "git commit -qm localwork",
 	    dir, dir, dir, dir, dir, dir);
 	CHECK(system(cmd) == 0);
 
@@ -180,6 +183,9 @@ void test_git_incoming(void)
 		CHECK(
 		    has_bit(&t, "a.txt", ST_INCOMING)); /* modified upstream */
 		CHECK(has_bit(&t, "b.txt", ST_INCOMING)); /* added upstream */
+		/* Our own local-only commit is NOT incoming (the bug: a
+		 * HEAD->upstream diff flags it as a deletion). */
+		CHECK(!has_bit(&t, "local.txt", ST_INCOMING));
 
 		tree_free(&t);
 		git_close(&g);

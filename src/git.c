@@ -627,25 +627,44 @@ static git_tree *peel_tree(git_reference *ref)
  * No-ops silently when there is no upstream. */
 void git_mark_incoming(git_ctx *g, tree *t)
 {
-	git_reference *head = NULL, *up = NULL;
+	git_reference *head = NULL;
 	if (git_repository_head(&head, g->repo) != 0)
 		return;
+	git_reference *up = NULL;
 	if (git_branch_upstream(&up, head) != 0) {
 		git_reference_free(head);
 		return;
 	}
-	git_tree *ht = peel_tree(head);
+
+	/* Diff from the merge-base to upstream, NOT from HEAD: that captures
+	 * only what upstream changed since we diverged (what a pull would
+	 * bring). A HEAD->upstream diff would also flag our own local-only
+	 * files as "incoming" deletions, which is wrong. */
+	const git_oid *hoid = git_reference_target(head);
+	const git_oid *uoid = git_reference_target(up);
+	git_oid base_oid;
+	bool have_base = hoid != NULL && uoid != NULL &&
+	                 git_merge_base(&base_oid, g->repo, hoid, uoid) == 0;
 	git_tree *ut = peel_tree(up);
 	git_reference_free(head);
 	git_reference_free(up);
-	if (ht == NULL || ut == NULL) {
-		git_tree_free(ht);
+
+	git_tree *base_tree = NULL;
+	if (have_base) {
+		git_commit *bc = NULL;
+		if (git_commit_lookup(&bc, g->repo, &base_oid) == 0) {
+			git_commit_tree(&base_tree, bc);
+			git_commit_free(bc);
+		}
+	}
+	if (ut == NULL || base_tree == NULL) {
 		git_tree_free(ut);
+		git_tree_free(base_tree);
 		return;
 	}
 
 	git_diff *diff = NULL;
-	if (git_diff_tree_to_tree(&diff, g->repo, ht, ut, NULL) == 0) {
+	if (git_diff_tree_to_tree(&diff, g->repo, base_tree, ut, NULL) == 0) {
 		size_t nd = git_diff_num_deltas(diff);
 		for (size_t i = 0; i < nd; i++) {
 			const git_diff_delta *d = git_diff_get_delta(diff, i);
@@ -654,8 +673,8 @@ void git_mark_incoming(git_ctx *g, tree *t)
 		}
 		git_diff_free(diff);
 	}
-	git_tree_free(ht);
 	git_tree_free(ut);
+	git_tree_free(base_tree);
 }
 
 /* ---- history (revwalk) --------------------------------------------------- */
