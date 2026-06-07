@@ -325,19 +325,21 @@ static char *read_file(const char *path, bool *binary)
 	FILE *fp = fopen(path, "rb");
 	if (fp == NULL)
 		return NULL;
-	size_t cap = 4096, len = 0;
-	char *buf = xmalloc(cap);
-	size_t r;
-	while ((r = fread(buf + len, 1, cap - len, fp)) > 0) {
-		len += r;
-		if (len == cap) {
-			cap *= 2;
-			buf = xrealloc(buf, cap);
-		}
+	/* Size then a single read - no read-after-EOF loop. */
+	if (fseek(fp, 0, SEEK_END) != 0) {
+		fclose(fp);
+		return NULL;
 	}
+	long sz = ftell(fp);
+	if (sz < 0 || fseek(fp, 0, SEEK_SET) != 0) {
+		fclose(fp);
+		return NULL;
+	}
+	char *buf = xmalloc((size_t)sz + 1);
+	size_t got = fread(buf, 1, (size_t)sz, fp);
 	fclose(fp);
-	*binary = memchr(buf, 0, len) != NULL;
-	buf[len] = '\0'; /* cap > len always (we grow before filling) */
+	*binary = memchr(buf, 0, got) != NULL;
+	buf[got] = '\0';
 	return buf;
 }
 
