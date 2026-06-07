@@ -89,6 +89,28 @@ void test_tree_merge_status(void)
 	tree_free(&t);
 }
 
+void test_tree_trailing_slash_is_dir(void)
+{
+	tree t;
+	tree_init(&t);
+
+	/* libgit2 reports a wholly-ignored dir as "build/": the trailing slash
+	 * must make it a directory node (expandable), not a file leaf, while
+	 * still carrying the status. */
+	tree_add(&t, "build/", ST_GITIGNORED);
+	uint32_t b = tree_find(&t, "build");
+	CHECK(b != NODE_NIL);
+	CHECK(!node_is_file(&t.nodes[b]));
+	CHECK((t.nodes[b].status & ST_GITIGNORED) != 0);
+
+	/* A normal file path is still a file. */
+	tree_add(&t, "src/main.c", 0);
+	CHECK(node_is_file(&t.nodes[tree_find(&t, "src/main.c")]));
+	CHECK(!node_is_file(&t.nodes[tree_find(&t, "src")]));
+
+	tree_free(&t);
+}
+
 void test_tree_case_order(void)
 {
 	tree t;

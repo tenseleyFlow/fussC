@@ -116,6 +116,12 @@ void tree_add(tree *t, const char *path, file_status status)
 	const char *p = path;
 	char comp[1024];
 
+	/* A trailing slash means the path names a directory (libgit2 reports a
+	 * wholly-ignored dir as "build/"): the terminal component is then a
+	 * directory node, not a file leaf. */
+	size_t plen = strlen(path);
+	bool dir_path = plen > 0 && path[plen - 1] == '/';
+
 	while (*p != '\0') {
 		const char *slash = strchr(p, '/');
 		size_t len = slash ? (size_t)(slash - p) : strlen(p);
@@ -129,6 +135,7 @@ void tree_add(tree *t, const char *path, file_status status)
 		}
 
 		bool is_last = (slash == NULL) || (*(slash + 1) == '\0');
+		bool is_file = is_last && !dir_path;
 
 		/* Build the cumulative path for this component. */
 		size_t off = (size_t)(p - path) + len;
@@ -143,7 +150,7 @@ void tree_add(tree *t, const char *path, file_status status)
 		memcpy(comp, p, len);
 		comp[len] = '\0';
 
-		cur = child_get_or_add(t, cur, comp, child_path, is_last);
+		cur = child_get_or_add(t, cur, comp, child_path, is_file);
 		if (is_last)
 			t->nodes[cur].status =
 			    status_merge(t->nodes[cur].status, status);

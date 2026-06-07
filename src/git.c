@@ -119,6 +119,33 @@ static const char *entry_path(const git_status_entry *e)
 	return NULL;
 }
 
+/* Post-pass over the recursively-scanned arena: a directory all of whose
+ * entries are ignored is itself ignored (so it renders dimmed), and every
+ * ignored directory starts collapsed so a large ignored tree never floods the
+ * view. Post-order so a dir of ignored subdirs is recognised too. Returns true
+ * when the node at `idx` is ignored. */
+static bool mark_ignored_dirs(tree *t, uint32_t idx)
+{
+	node *n = &t->nodes[idx];
+	if (node_is_file(n))
+		return (n->status & ST_GITIGNORED) != 0;
+
+	bool any = false, all_ignored = true;
+	for (uint32_t c = n->first_child; c != NODE_NIL;
+	     c = t->nodes[c].next_sibling) {
+		any = true;
+		if (!mark_ignored_dirs(t, c))
+			all_ignored = false;
+	}
+	if (any && all_ignored)
+		n->status |= ST_GITIGNORED;
+
+	bool ignored = (n->status & ST_GITIGNORED) != 0;
+	if (ignored)
+		n->flags &= (uint8_t)~NF_EXPANDED; /* collapse by default */
+	return ignored;
+}
+
 int git_load_tree(git_ctx *g, tree *t, bool all)
 {
 	git_repository *repo = g->repo;
@@ -126,12 +153,14 @@ int git_load_tree(git_ctx *g, tree *t, bool all)
 	git_status_options opts;
 	git_status_options_init(&opts, GIT_STATUS_OPTIONS_VERSION);
 	opts.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
-	/* Include ignored paths so they render dimmed, but do NOT recurse into
-	 * ignored dirs: one node per top-level ignored path (e.g. "build/"),
-	 * not a flood of every artifact under it. */
+	/* Recurse into ignored dirs so they render as real (dimmed) directories
+	 * with their children, not a single leaf. mark_ignored_dirs then
+	 * collapses every ignored dir by default, so a large ignored tree (e.g.
+	 * node_modules) shows as one collapsed node, never a flood of rows. */
 	opts.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED |
 	             GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS |
-	             GIT_STATUS_OPT_INCLUDE_IGNORED;
+	             GIT_STATUS_OPT_INCLUDE_IGNORED |
+	             GIT_STATUS_OPT_RECURSE_IGNORED_DIRS;
 
 	git_status_list *list = NULL;
 	if (git_status_list_new(&list, repo, &opts) != 0)
@@ -161,6 +190,11 @@ int git_load_tree(git_ctx *g, tree *t, bool all)
 		}
 		git_index_free(idx);
 	}
+
+	/* Mark + collapse ignored directories once the whole arena is built. */
+	for (uint32_t c = t->nodes[0].first_child; c != NODE_NIL;
+	     c = t->nodes[c].next_sibling)
+		mark_ignored_dirs(t, c);
 
 	return 0;
 }

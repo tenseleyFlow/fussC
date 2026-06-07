@@ -30,8 +30,8 @@ void flat_free(flat_list *f);
 /*
  * Rebuild the visible list: pre-order DFS over the tree, descending into a
  * directory only when it is expanded. The synthetic root is not emitted; its
- * children are depth 0. When `hide_dot` is true, names beginning with '.' (and
- * their subtrees) are skipped.
+ * children are depth 0. When `hide_dot` is true, hidden paths - names beginning
+ * with '.' and gitignored paths (with their subtrees) - are skipped.
  */
 void flatten(flat_list *f, const tree *t, bool hide_dot);
 

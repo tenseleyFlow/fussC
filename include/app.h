@@ -24,8 +24,8 @@
 typedef struct {
 	tree t;
 	flat_list visible;
-	uint32_t selected; /* index into visible.rows */
-	bool hide_dotfiles;
+	uint32_t selected;  /* index into visible.rows */
+	bool hide_dotfiles; /* H: hide hidden paths (dotfiles + gitignored) */
 	char filter[FILTER_MAX];
 	size_t filter_len;
 	uint64_t
@@ -83,6 +83,11 @@ void app_expand_to(app *a, uint32_t node);
  */
 char **app_collapsed_paths(const app *a, uint32_t *count); /* caller frees */
 void app_collapse_paths(app *a, char *const *paths, uint32_t count);
+/* Ignored dirs start collapsed (git_load_tree). Snapshot the ones the user has
+ * expanded and reapply them after a rebuild, so opening an ignored dir survives
+ * a refresh (mirror of the collapsed-path snapshot above). */
+char **app_expanded_ignored_paths(const app *a, uint32_t *count); /* frees */
+void app_expand_paths(app *a, char *const *paths, uint32_t count);
 char *app_selected_path_dup(const app *a); /* caller frees, may be NULL */
 void app_select_path(app *a, const char *path);
 

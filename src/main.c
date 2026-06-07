@@ -112,8 +112,9 @@ static bool sel_untracked(app *a)
 static void do_refresh(loopctx *L)
 {
 	app *a = L->a;
-	uint32_t ncol = 0;
+	uint32_t ncol = 0, nexp = 0;
 	char **collapsed = app_collapsed_paths(a, &ncol);
+	char **expanded = app_expanded_ignored_paths(a, &nexp);
 	char *selpath = app_selected_path_dup(a);
 
 	if (L->eng)
@@ -126,6 +127,8 @@ static void do_refresh(loopctx *L)
 		git_ahead_behind(L->g, &a->ahead, &a->behind);
 	}
 	app_collapse_paths(a, collapsed, ncol);
+	app_expand_paths(a, expanded,
+	                 nexp); /* re-open ignored dirs the user had */
 	if (L->eng)
 		fuzzy_engine_resume(L->eng);
 
@@ -135,6 +138,9 @@ static void do_refresh(loopctx *L)
 	for (uint32_t i = 0; i < ncol; i++)
 		free(collapsed[i]);
 	free(collapsed);
+	for (uint32_t i = 0; i < nexp; i++)
+		free(expanded[i]);
+	free(expanded);
 	free(selpath);
 
 	if (L->eng && a->filter_len > 0)

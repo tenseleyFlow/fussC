@@ -36,15 +36,18 @@ static void flat_push(flat_list *f, uint32_t node, uint16_t depth)
 	f->len++;
 }
 
-static bool is_dotfile(const tree *t, uint32_t idx)
+/* "Hidden" (toggled by H) = dotfiles and gitignored paths: both are noise the
+ * user usually does not want in the tree. */
+static bool is_hidden(const tree *t, uint32_t idx)
 {
-	return t->nodes[idx].name[0] == '.';
+	const node *n = &t->nodes[idx];
+	return n->name[0] == '.' || (n->status & ST_GITIGNORED) != 0;
 }
 
 static void walk(flat_list *f, const tree *t, uint32_t idx, uint16_t depth,
                  bool hide_dot)
 {
-	if (hide_dot && is_dotfile(t, idx))
+	if (hide_dot && is_hidden(t, idx))
 		return;
 
 	flat_push(f, idx, depth);

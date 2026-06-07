@@ -239,6 +239,34 @@ void app_collapse_paths(app *a, char *const *paths, uint32_t count)
 	}
 }
 
+char **app_expanded_ignored_paths(const app *a, uint32_t *count)
+{
+	char **out = NULL;
+	uint32_t n = 0, cap = 0;
+	for (uint32_t i = 1; i < a->t.len; i++) {
+		const node *nd = &a->t.nodes[i];
+		if (!node_is_file(nd) && node_is_expanded(nd) &&
+		    (nd->status & ST_GITIGNORED)) {
+			if (n == cap) {
+				cap = cap ? cap * 2 : 8;
+				out = xrealloc(out, cap * sizeof(*out));
+			}
+			out[n++] = xstrdup(nd->path);
+		}
+	}
+	*count = n;
+	return out;
+}
+
+void app_expand_paths(app *a, char *const *paths, uint32_t count)
+{
+	for (uint32_t i = 0; i < count; i++) {
+		uint32_t idx = tree_find(&a->t, paths[i]);
+		if (idx != NODE_NIL && !node_is_file(&a->t.nodes[idx]))
+			a->t.nodes[idx].flags |= NF_EXPANDED;
+	}
+}
+
 char *app_selected_path_dup(const app *a)
 {
 	uint32_t n = app_selected_node(a);

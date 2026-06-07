@@ -1,3 +1,4 @@
+#include "flatten.h"
 #include "git.h"
 #include "test.h"
 #include "tree.h"
@@ -99,8 +100,8 @@ void test_git_ignored(void)
 	char dir[256];
 	temp_dir(dir, sizeof(dir), "gitign");
 
-	/* An ignored directory must surface as a single dimmed node, not a
-	 * flood of every artifact under it. */
+	/* An ignored directory renders as a real (dimmed) directory with its
+	 * children, but collapsed by default so it never floods the view. */
 	char cmd[2300];
 	snprintf(cmd, sizeof(cmd),
 	         "rm -rf '%s' && mkdir -p '%s' && cd '%s' && git init -q && "
@@ -120,10 +121,47 @@ void test_git_ignored(void)
 		tree_init(&t);
 		CHECK(git_load_tree(&g, &t, false) == 0);
 
+		/* build is a dimmed directory, not a file leaf, collapsed. */
+		uint32_t bi = tree_find(&t, "build");
+		CHECK(bi != NODE_NIL);
+		CHECK(!node_is_file(&t.nodes[bi]));
+		CHECK(!node_is_expanded(&t.nodes[bi]));
 		CHECK(has_bit(&t, "build", ST_GITIGNORED));
-		/* Not recursed: the artifacts under build/ are absent. */
-		CHECK(tree_find(&t, "build/a.o") == NODE_NIL);
-		CHECK(tree_find(&t, "build/b.o") == NODE_NIL);
+
+		/* Recursed: the children exist and are themselves ignored. */
+		CHECK(has_bit(&t, "build/a.o", ST_GITIGNORED));
+		CHECK(has_bit(&t, "build/b.o", ST_GITIGNORED));
+
+		/* Collapsed-by-default: build is visible but its children are
+		 * not; expanding splices the two children in. */
+		uint32_t ai = tree_find(&t, "build/a.o");
+		uint32_t bo = tree_find(&t, "build/b.o");
+		flat_list f;
+		flat_init(&f);
+		flatten(&f, &t, false);
+		uint32_t brow = f.len; /* find build's visible row */
+		bool child_visible = false;
+		for (uint32_t i = 0; i < f.len; i++) {
+			if (f.rows[i].node == bi)
+				brow = i;
+			if (f.rows[i].node == ai || f.rows[i].node == bo)
+				child_visible = true;
+		}
+		CHECK(brow < f.len);   /* build is shown */
+		CHECK(!child_visible); /* its children are not (collapsed) */
+		uint32_t before = f.len;
+		flat_toggle(&f, &t, brow, false);
+		CHECK(f.len == before + 2); /* a.o + b.o spliced in */
+		flat_free(&f);
+
+		/* H (hide hidden) drops the ignored dir entirely - and the only
+		 * other entry here, the .gitignore dotfile - leaving nothing.
+		 */
+		flat_list fh;
+		flat_init(&fh);
+		flatten(&fh, &t, true);
+		CHECK(fh.len == 0);
+		flat_free(&fh);
 
 		tree_free(&t);
 		git_close(&g);
