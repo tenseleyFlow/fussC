@@ -69,7 +69,26 @@ static void ascii_lower(const char *in, char *out, size_t cap)
 	out[i] = '\0';
 }
 
-uint32_t fuzzy_best_match(const tree *t, const char *query)
+/* Reachability filter for fuzzy_best_match_in. A node is skipped when it is
+ * hidden by H (dotfile or gitignored) or sits under a collapsed ignored dir (an
+ * ancestor in the barrier set). Walks parent links + reads status/name only -
+ * all immutable between submits - so the worker never touches a live flag. */
+static bool fz_skip(const tree *t, uint32_t i, bool hide, const uint32_t *bar,
+                    int nbar)
+{
+	const node *n = &t->nodes[i];
+	if (hide && (n->name[0] == '.' || (n->status & ST_GITIGNORED)))
+		return true;
+	for (uint32_t a = n->parent; a != NODE_NIL && a != 0;
+	     a = t->nodes[a].parent)
+		for (int k = 0; k < nbar; k++)
+			if (bar[k] == a)
+				return true;
+	return false;
+}
+
+uint32_t fuzzy_best_match_in(const tree *t, const char *query, bool hide,
+                             const uint32_t *bar, int nbar)
 {
 	if (query[0] == '\0')
 		return NODE_NIL;
@@ -82,6 +101,8 @@ uint32_t fuzzy_best_match(const tree *t, const char *query)
 
 	/* Pass 1: basenames (node index 0 is the synthetic root - skip it). */
 	for (uint32_t i = 1; i < t->len; i++) {
+		if (fz_skip(t, i, hide, bar, nbar))
+			continue;
 		int s = fuzzy_score(pat, t->nodes[i].name_lower);
 		if (s > best) {
 			best = s;
@@ -95,6 +116,8 @@ uint32_t fuzzy_best_match(const tree *t, const char *query)
 	 * stray cross-directory subsequence (e.g. "fll" inside
 	 * ".github/workflows/ci.yml") cannot win when no filename matches. */
 	for (uint32_t i = 1; i < t->len; i++) {
+		if (fz_skip(t, i, hide, bar, nbar))
+			continue;
 		int s = fuzzy_score(pat, t->nodes[i].path_lower);
 		if (s >= SCORE_PATH_MIN && s > best) {
 			best = s;
@@ -103,6 +126,11 @@ uint32_t fuzzy_best_match(const tree *t, const char *query)
 	}
 
 	return best > SCORE_NONE ? best_idx : NODE_NIL;
+}
+
+uint32_t fuzzy_best_match(const tree *t, const char *query)
+{
+	return fuzzy_best_match_in(t, query, false, NULL, 0);
 }
 
 /* ---- background engine --------------------------------------------------- */
@@ -122,13 +150,20 @@ static void *worker_main(void *arg)
 		e->processed = g;
 		char q[sizeof(e->query)];
 		memcpy(q, e->query, sizeof(q));
+		bool hide = e->hide;
+		int nbar = e->barrier_n;
+		uint32_t bar[FZ_BARRIER_MAX];
+		memcpy(bar, e->barriers, (size_t)nbar * sizeof(bar[0]));
 		const tree *arena = e->arena;
 		e->busy = true;
 		pthread_mutex_unlock(&e->mu);
 
-		/* Score off-lock: the arena is immutable for this generation.
+		/* Score off-lock: the arena (and this generation's query, hide
+		 * flag, and barrier snapshot) is immutable for this generation.
 		 */
-		uint32_t best = arena ? fuzzy_best_match(arena, q) : NODE_NIL;
+		uint32_t best =
+		    arena ? fuzzy_best_match_in(arena, q, hide, bar, nbar)
+		          : NODE_NIL;
 
 		pthread_mutex_lock(&e->mu);
 		e->busy = false;
@@ -153,6 +188,8 @@ bool fuzzy_engine_start(fuzzy_engine *e)
 {
 	e->arena = NULL;
 	e->query[0] = '\0';
+	e->hide = false;
+	e->barrier_n = 0;
 	e->generation = 0;
 	e->processed = 0;
 	e->quit = false;
@@ -219,15 +256,29 @@ int fuzzy_engine_wake_fd(const fuzzy_engine *e)
 	return e->wake_r;
 }
 
-void fuzzy_submit(fuzzy_engine *e, const tree *arena, const char *query)
+void fuzzy_submit_in(fuzzy_engine *e, const tree *arena, const char *query,
+                     bool hide, const uint32_t *barriers, int nbar)
 {
+	if (nbar > FZ_BARRIER_MAX)
+		nbar =
+		    FZ_BARRIER_MAX; /* excess stay searchable, not overflow */
 	pthread_mutex_lock(&e->mu);
 	e->arena = arena;
 	strncpy(e->query, query, sizeof(e->query) - 1);
 	e->query[sizeof(e->query) - 1] = '\0';
+	e->hide = hide;
+	e->barrier_n = nbar;
+	if (nbar > 0)
+		memcpy(e->barriers, barriers,
+		       (size_t)nbar * sizeof(e->barriers[0]));
 	e->generation++;
 	pthread_cond_signal(&e->cv);
 	pthread_mutex_unlock(&e->mu);
+}
+
+void fuzzy_submit(fuzzy_engine *e, const tree *arena, const char *query)
+{
+	fuzzy_submit_in(e, arena, query, false, NULL, 0);
 }
 
 bool fuzzy_engine_take(fuzzy_engine *e, uint32_t *node)

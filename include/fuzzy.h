@@ -7,6 +7,11 @@
 
 #include "tree.h"
 
+/* Cap on the barrier set (collapsed ignored dirs whose subtrees are excluded
+ * from the search). A realistic view has a handful; the excess past this just
+ * stay searchable (correct, slightly slower) rather than overflow. */
+#define FZ_BARRIER_MAX 256
+
 /*
  * fzf-style subsequence scorer and an index-all-nodes best-match search. The
  * scorer is a pure function over already-lowercased strings; the search scans
@@ -45,6 +50,20 @@ int fuzzy_score(const char *pat, const char *text);
 uint32_t fuzzy_best_match(const tree *t, const char *query);
 
 /*
+ * Like fuzzy_best_match but with the view's reachability rules applied, so a
+ * fuzzy-jump only lands on something the user could see by expanding non-
+ * ignored directories:
+ *   - `hide` (the H toggle): skip dotfiles and gitignored paths entirely.
+ *   - `barriers`/`nbar`: node indices of collapsed *ignored* directories;
+ *     anything under one is skipped (a big collapsed node_modules is never
+ *     scored). Non-ignored collapsed dirs are still searched (auto-expand).
+ * The caller snapshots `barriers` from the live tree, so the worker reads only
+ * data that is immutable between submits (no expansion-flag races).
+ */
+uint32_t fuzzy_best_match_in(const tree *t, const char *query, bool hide,
+                             const uint32_t *barriers, int nbar);
+
+/*
  * Background scoring engine. A persistent worker thread scores the arena off
  * the main thread so input never blocks on a huge tree. The query/result
  * handoff is guarded by a mutex+condvar with a generation counter (stale
@@ -61,6 +80,9 @@ typedef struct {
 	/* guarded by mu */
 	const tree *arena;
 	char query[256];
+	bool hide; /* H toggle: skip dotfiles + ignored */
+	uint32_t barriers[FZ_BARRIER_MAX]; /* collapsed ignored dirs to prune */
+	int barrier_n;
 	uint64_t generation; /* bumped on each submit */
 	uint64_t processed;  /* generation the worker last began scoring */
 	bool quit;
@@ -82,6 +104,12 @@ int fuzzy_engine_wake_fd(const fuzzy_engine *e);
 /* Publish a new query against `arena` (bumps the generation, wakes the worker).
  */
 void fuzzy_submit(fuzzy_engine *e, const tree *arena, const char *query);
+
+/* As fuzzy_submit, but carrying the view's reachability snapshot (see
+ * fuzzy_best_match_in): `hide` and the barrier set are copied under the lock so
+ * the worker scores with them race-free. */
+void fuzzy_submit_in(fuzzy_engine *e, const tree *arena, const char *query,
+                     bool hide, const uint32_t *barriers, int nbar);
 
 /* Drain the wake pipe and, if the latest generation's result is ready, store it
  * in *node and return true. Returns false when no fresh result is pending. */

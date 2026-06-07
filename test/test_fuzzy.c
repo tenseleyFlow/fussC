@@ -75,6 +75,46 @@ void test_fuzzy_path_floor(void)
 	CHECK(fuzzy_score("fll", "flatten.c") == SCORE_NONE);
 }
 
+/* Reachability rules: fuzzy only lands on what the user could reveal by
+ * expanding non-ignored dirs. Behind a collapsed ignored dir (a barrier) or
+ * hidden by H, a node is not a jump target. */
+void test_fuzzy_reachability(void)
+{
+	tree t;
+	tree_init(&t);
+	tree_add(&t, "src/main.c", 0);
+	tree_add(&t, "build/output.o", ST_GITIGNORED);
+	tree_add(&t, "build", ST_GITIGNORED); /* mark the dir ignored */
+	tree_add(&t, "notes.log",
+	         ST_GITIGNORED); /* a root-level ignored file */
+
+	uint32_t build = tree_find(&t, "build");
+	uint32_t out = tree_find(&t, "build/output.o");
+	uint32_t log = tree_find(&t, "notes.log");
+	uint32_t main_c = tree_find(&t, "src/main.c");
+	CHECK(!node_is_file(&t.nodes[build])); /* build is a dir */
+
+	/* No barriers, no hide: index-all default still reaches everything. */
+	CHECK(fuzzy_best_match_in(&t, "output", false, NULL, 0) == out);
+
+	/* build collapsed -> barrier: its child is NOT a jump target, but the
+	 * dir itself (visible) and a root-level ignored file still are. */
+	uint32_t bar[1] = {build};
+	CHECK(fuzzy_best_match_in(&t, "output", false, bar, 1) == NODE_NIL);
+	CHECK(fuzzy_best_match_in(&t, "build", false, bar, 1) == build);
+	CHECK(fuzzy_best_match_in(&t, "notes", false, bar, 1) == log);
+	/* non-ignored content is unaffected by the barrier. */
+	CHECK(fuzzy_best_match_in(&t, "main", false, bar, 1) == main_c);
+
+	/* H on: nothing ignored is a jump target; non-ignored still is. */
+	CHECK(fuzzy_best_match_in(&t, "notes", true, NULL, 0) == NODE_NIL);
+	CHECK(fuzzy_best_match_in(&t, "output", true, NULL, 0) == NODE_NIL);
+	CHECK(fuzzy_best_match_in(&t, "build", true, NULL, 0) == NODE_NIL);
+	CHECK(fuzzy_best_match_in(&t, "main", true, NULL, 0) == main_c);
+
+	tree_free(&t);
+}
+
 /* Expected jump targets for representative queries (regression guard). */
 void test_fuzzy_expected_matches(void)
 {

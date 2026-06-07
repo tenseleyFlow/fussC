@@ -73,6 +73,7 @@ void test_fuzzy_tiers(void);
 void test_fuzzy_ordering(void);
 void test_fuzzy_best_match(void);
 void test_fuzzy_path_floor(void);
+void test_fuzzy_reachability(void);
 void test_fuzzy_expected_matches(void);
 void test_fuzzy_auto_expand(void);
 void test_fuzzy_fuzz(void);
@@ -172,6 +173,7 @@ int main(void)
 	RUN(test_fuzzy_ordering);
 	RUN(test_fuzzy_best_match);
 	RUN(test_fuzzy_path_floor);
+	RUN(test_fuzzy_reachability);
 	RUN(test_fuzzy_expected_matches);
 	RUN(test_fuzzy_auto_expand);
 	RUN(test_fuzzy_fuzz);

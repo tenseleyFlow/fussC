@@ -76,6 +76,13 @@ bool app_filter_expired(const app *a, uint64_t now_ns);
 /* Mark every ancestor of `node` expanded so the node becomes visible. */
 void app_expand_to(app *a, uint32_t node);
 
+/* Collect the fuzzy "barrier" set: the node indices of collapsed *ignored*
+ * directories, whose subtrees fuzzy must not search (a big collapsed
+ * node_modules stays out of the index until expanded). Writes up to `max`
+ * indices into `out` and returns the count. Honors the H toggle: when hidden,
+ * ignored subtrees are pruned here too. */
+int app_fuzzy_barriers(const app *a, uint32_t *out, int max);
+
 /*
  * Refresh helpers (used to rebuild the tree after a git mutation while keeping
  * the user's view). Snapshot the collapsed-directory paths and selected path

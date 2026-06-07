@@ -107,6 +107,23 @@ static bool sel_untracked(app *a)
 	return (s & ST_UNTRACKED) && !(s & ST_STAGED);
 }
 
+/* Snapshot the view's fuzzy reachability (the collapsed-ignored-dir barriers +
+ * the H state) and run a match for the current filter: submit to the worker, or
+ * score inline when there is no engine. */
+static void fuzzy_kick(loopctx *L)
+{
+	app *a = L->a;
+	uint32_t bar[FZ_BARRIER_MAX];
+	int nbar = app_fuzzy_barriers(a, bar, FZ_BARRIER_MAX);
+	if (L->eng)
+		fuzzy_submit_in(L->eng, &a->t, a->filter, a->hide_dotfiles, bar,
+		                nbar);
+	else
+		app_apply_match(a, fuzzy_best_match_in(&a->t, a->filter,
+		                                       a->hide_dotfiles, bar,
+		                                       nbar));
+}
+
 /* Rebuild the tree from git after a mutation, keeping the user's collapse state
  * and selection, and keeping the fuzzy worker safe across the free/rebuild. */
 static void do_refresh(loopctx *L)
@@ -143,8 +160,8 @@ static void do_refresh(loopctx *L)
 	free(expanded);
 	free(selpath);
 
-	if (L->eng && a->filter_len > 0)
-		fuzzy_submit(L->eng, &a->t, a->filter);
+	if (a->filter_len > 0)
+		fuzzy_kick(L);
 }
 
 /* Run an immediate op result: refresh + ok message, or surface the error. */
@@ -1027,21 +1044,13 @@ static void apply_action(loopctx *L, action act)
 	case ACT_FILTER_PUSH:
 		app_filter_age(a, mono_ns()); /* reset if idle, then append */
 		app_filter_push(a, act.cp);
-		if (L->eng)
-			fuzzy_submit(L->eng, &a->t, a->filter);
-		else
-			app_apply_match(a, fuzzy_best_match(&a->t, a->filter));
+		fuzzy_kick(L);
 		break;
 	case ACT_FILTER_BACKSPACE:
 		app_filter_age(a, mono_ns());
 		app_filter_backspace(a);
-		if (a->filter_len > 0) {
-			if (L->eng)
-				fuzzy_submit(L->eng, &a->t, a->filter);
-			else
-				app_apply_match(
-				    a, fuzzy_best_match(&a->t, a->filter));
-		}
+		if (a->filter_len > 0)
+			fuzzy_kick(L);
 		break;
 	case ACT_FILTER_CLEAR:
 		app_filter_clear(a);

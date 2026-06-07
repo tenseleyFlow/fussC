@@ -201,6 +201,36 @@ bool app_filter_expired(const app *a, uint64_t now_ns)
 	return a->filter_len > 0 && now_ns - a->last_input_ns >= gap;
 }
 
+/* Pruned DFS: descend the reachable tree, recording each collapsed ignored dir
+ * as a barrier (and not descending into it - that subtree is what we want to
+ * keep out of the fuzzy index). Hidden subtrees (under H) are pruned without
+ * recording, since fuzzy skips them via the hide flag anyway. */
+static void collect_barriers(const tree *t, uint32_t idx, bool hide,
+                             uint32_t *out, int *n, int max)
+{
+	const node *nd = &t->nodes[idx];
+	bool ignored = (nd->status & ST_GITIGNORED) != 0;
+	if (hide && (nd->name[0] == '.' || ignored))
+		return; /* hidden: fuzzy skips it; no need to descend */
+	if (ignored && !node_is_file(nd) && !node_is_expanded(nd)) {
+		if (*n < max)
+			out[(*n)++] = idx;
+		return; /* collapsed ignored dir: a barrier, don't descend */
+	}
+	for (uint32_t c = nd->first_child; c != NODE_NIL;
+	     c = t->nodes[c].next_sibling)
+		collect_barriers(t, c, hide, out, n, max);
+}
+
+int app_fuzzy_barriers(const app *a, uint32_t *out, int max)
+{
+	int n = 0;
+	for (uint32_t c = a->t.nodes[0].first_child; c != NODE_NIL;
+	     c = a->t.nodes[c].next_sibling)
+		collect_barriers(&a->t, c, a->hide_dotfiles, out, &n, max);
+	return n;
+}
+
 void app_expand_to(app *a, uint32_t node)
 {
 	if (node == NODE_NIL)
