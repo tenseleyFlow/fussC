@@ -227,13 +227,24 @@ static void shquote(const char *s, char *out, size_t n)
 	out[o] = '\0';
 }
 
-/* Hand the terminal to a pager (sh -c cmd), then re-enter and force a repaint.
- */
+/* Hand the terminal to an interactive command (sh -c cmd) on the primary
+ * screen, then re-enter fussy and force a repaint. The command's own output
+ * (an editor, git's "Successfully rebased", an error, conflict instructions)
+ * is shown on the primary screen; we then wait for Enter before snapping back
+ * to the alt-screen, so a fast-finishing or fast-failing command can't flash
+ * its output away unread. */
 static void run_viewer(loopctx *L, const char *cmd)
 {
-	term_restore(); /* leave alt-screen + raw so the pager owns the tty */
+	term_restore(); /* leave alt-screen + raw so the command owns the tty */
 	int rc = system(cmd);
 	(void)rc;
+	/* Cooked mode is back, so this prompt echoes and a line read blocks
+	 * until Enter. */
+	fputs("\n[fussy] press Enter to return\342\200\246", stdout);
+	fflush(stdout);
+	int c;
+	while ((c = getchar()) != '\n' && c != EOF)
+		;
 	term_resume();
 	screen_invalidate(L->s);
 }
